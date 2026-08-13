@@ -7,11 +7,11 @@ import {
 } from "../shared/learning";
 
 describe("learning plan rules", () => {
-  it("splits a 90-day path into bounded 30-day segments", () => {
-    expect(createPlanSegments(90)).toEqual([
-      { startDay: 1, endDay: 30 },
-      { startDay: 31, endDay: 60 },
-      { startDay: 61, endDay: 90 },
+  it("splits a path into bounded seven-day segments", () => {
+    expect(createPlanSegments(15)).toEqual([
+      { startDay: 1, endDay: 7 },
+      { startDay: 8, endDay: 14 },
+      { startDay: 15, endDay: 15 },
     ]);
   });
 

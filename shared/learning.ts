@@ -5,7 +5,7 @@ export const LEARNING_LIMITS = {
   maxDailyMinutes: 480,
   minDurationDays: 1,
   maxDurationDays: 90,
-  planSegmentDays: 30,
+  planSegmentDays: 7,
   maxTasksPerDay: 8,
   maxPlanTasks: 500,
   passingScore: 70,

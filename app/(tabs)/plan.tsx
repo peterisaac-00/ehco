@@ -12,8 +12,14 @@ export default function PlanScreen() {
   const { isAuthenticated } = useAuth();
   const activeGoal = trpc.goals.active.useQuery(undefined, { enabled: isAuthenticated });
   const plan = trpc.plans.getForGoal.useQuery({ goalId: activeGoal.data?.id ?? 0 }, { enabled: Boolean(activeGoal.data?.id) });
-  const generate = trpc.plans.generateInitial.useMutation({ onSuccess: () => plan.refetch() });
-  const approve = trpc.plans.approve.useMutation({ onSuccess: () => router.replace("/(tabs)") });
+  const generate = trpc.plans.generateInitial.useMutation({
+    onSuccess: () => void plan.refetch(),
+    onError: (error) => Alert.alert("تعذر إنشاء الخطة", error.message),
+  });
+  const approve = trpc.plans.approve.useMutation({
+    onSuccess: () => router.replace("/(tabs)"),
+    onError: (error) => Alert.alert("تعذر اعتماد الخطة", error.message),
+  });
   const [editRequest, setEditRequest] = useState("");
   const editPlan = trpc.plans.edit.useMutation({
     onSuccess: () => { setEditRequest(""); void plan.refetch(); },
@@ -37,7 +43,7 @@ export default function PlanScreen() {
         {!draft ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>جاهز لبناء الخريطة</Text>
-            <Text style={styles.cardText}>سننشئ خريطة المدة كاملة، ثم نجهّز مهام أول 30 يومًا مباشرة.</Text>
+            <Text style={styles.cardText}>سننشئ خريطة المدة كاملة، ثم نجهّز مهام أول 7 أيام مباشرة لضمان سرعة الاستجابة.</Text>
             <PrimaryButton label="إنشاء الخطة" onPress={() => generate.mutate({ goalId: activeGoal.data!.id })} loading={generate.isPending} />
           </View>
         ) : (
