@@ -8,6 +8,27 @@
       "when": 1763372440610,
       "tag": "0000_elite_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1786618552905,
+      "tag": "0001_fuzzy_goblin_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1786619038403,
+      "tag": "0002_lethal_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786619109549,
+      "tag": "0003_perpetual_ironclad",
+      "breakpoints": true
     }
   ]
 }
