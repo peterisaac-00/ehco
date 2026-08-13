@@ -19,7 +19,16 @@ export default function OnboardingScreen() {
   const [duration, setDuration] = useState("30");
   const createGoal = trpc.goals.create.useMutation({
     onSuccess: () => router.replace("/(tabs)/plan"),
-    onError: (error) => Alert.alert("تعذر إنشاء الهدف", error.message),
+    onError: (error) => {
+      if (error.data?.code === "CONFLICT") {
+        Alert.alert("لديك هدف قائم", "تم حفظ هدفك بالفعل. افتح الخطة الحالية لإنشاء مسار التعلم أو متابعته.", [
+          { text: "فتح الخطة", onPress: () => router.replace("/(tabs)/plan") },
+          { text: "حسنًا", style: "cancel" },
+        ]);
+        return;
+      }
+      Alert.alert("تعذر إنشاء الهدف", error.message);
+    },
   });
 
   const submit = () => {

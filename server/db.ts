@@ -537,8 +537,13 @@ async function materializeSegment(
 }
 
 function isDuplicateKey(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (
-    ("code" in error && (error as { code?: string }).code === "ER_DUP_ENTRY") ||
-    ("errno" in error && (error as { errno?: number }).errno === 1062)
-  );
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; errno?: number; message?: string; cause?: unknown };
+    if (candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062 || /duplicate entry|er_dup_entry/i.test(candidate.message ?? "")) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
 }
