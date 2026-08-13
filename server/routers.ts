@@ -4,19 +4,49 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, revisePlanOutline } from "./learning-ai";
+import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as learningDb from "./db";
 
 const goalIdSchema = z.object({ goalId: z.number().int().positive() });
 const taskIdSchema = z.object({ taskId: z.number().int().positive() });
+const localAuthInputSchema = z.object({
+  username: z.string().trim().min(3, "اسم المستخدم يجب أن يحتوي ثلاثة أحرف على الأقل.").max(32).regex(/^[a-zA-Z0-9_]+$/, "استخدم حروفًا إنجليزية أو أرقامًا أو _ فقط."),
+  password: z.string().min(8, "كلمة المرور يجب أن تحتوي ثمانية أحرف على الأقل.").max(128),
+});
 
 export const appRouter = router({
   system: systemRouter,
   health: publicProcedure.query(() => ({ status: "ok" as const, service: "ehco-api" })),
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
+    register: publicProcedure.input(localAuthInputSchema).mutation(async ({ input }) => {
+      try {
+        const username = normalizeUsername(input.username);
+        const user = await learningDb.createLocalUser({ username, passwordHash: await hashPassword(input.password) });
+        const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name ?? username });
+        return { sessionToken, user };
+      } catch (error) {
+        throw toTrpcError(error);
+      }
+    }),
+    login: publicProcedure.input(localAuthInputSchema).mutation(async ({ input }) => {
+      try {
+        const username = normalizeUsername(input.username);
+        const account = await learningDb.getLocalUserByUsername(username);
+        if (!account || !(await verifyPassword(input.password, account.passwordHash))) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "اسم المستخدم أو كلمة المرور غير صحيحان." });
+        }
+        await learningDb.markLocalUserSignedIn(account.user.id);
+        const sessionToken = await sdk.createSessionToken(account.user.openId, { name: account.user.name ?? username });
+        return { sessionToken, user: account.user };
+      } catch (error) {
+        throw toTrpcError(error);
+      }
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -173,6 +203,9 @@ export type AppRouter = typeof appRouter;
 function toTrpcError(error: unknown): TRPCError {
   if (error instanceof TRPCError) return error;
   if (error instanceof learningDb.ActiveGoalConflictError) {
+    return new TRPCError({ code: "CONFLICT", message: error.message });
+  }
+  if (error instanceof learningDb.LocalAuthConflictError) {
     return new TRPCError({ code: "CONFLICT", message: error.message });
   }
   if (error instanceof learningDb.LearningStateError) {

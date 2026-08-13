@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Alert, Text, View, StyleSheet } from "react-native";
+import { router } from "expo-router";
 
 import { PrimaryButton } from "@/components/primary-button";
 import { ScreenContainer } from "@/components/screen-container";
-import { startOAuthLogin } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
 import { disableDailyReminder, enableDailyReminder, isDailyReminderEnabled } from "@/lib/daily-reminder";
 
@@ -41,7 +41,7 @@ export default function ProfileScreen() {
           <Text style={styles.detail}>تنبيه يومي محلي عند الساعة 8:00 مساءً وفق توقيت جهازك.</Text>
         </View>
         <PrimaryButton label={reminderEnabled ? "إيقاف التنبيه اليومي" : "تفعيل التنبيه اليومي"} variant="secondary" onPress={() => void toggleReminder()} loading={reminderLoading} />
-        {isAuthenticated ? <PrimaryButton label="تسجيل الخروج" variant="secondary" onPress={() => void logout()} /> : <PrimaryButton label="تسجيل الدخول" onPress={() => void startOAuthLogin()} />}
+        {isAuthenticated ? <PrimaryButton label="تسجيل الخروج" variant="secondary" onPress={() => void logout()} /> : <PrimaryButton label="تسجيل الدخول" onPress={() => router.push("/login")} />}
       </View>
     </ScreenContainer>
   );

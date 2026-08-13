@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { PrimaryButton } from "@/components/primary-button";
 import { ScreenContainer } from "@/components/screen-container";
-import { startOAuthLogin } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 
@@ -34,7 +33,7 @@ export default function PlanScreen() {
     onError: (error) => Alert.alert("تعذر تعديل المسودة", error.message),
   });
 
-  if (!isAuthenticated) return <GuestPlan label="تسجيل الدخول للبدء" onStart={() => void startOAuthLogin()} />;
+  if (!isAuthenticated) return <GuestPlan label="تسجيل الدخول للبدء" onStart={() => router.push("/login")} />;
   if (activeGoal.isLoading) return <Loading />;
   if (!activeGoal.data) return <GuestPlan onStart={() => router.push("/onboarding")} />;
 

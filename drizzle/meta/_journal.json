@@ -29,6 +29,13 @@
       "when": 1786619109549,
       "tag": "0003_perpetual_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786622153639,
+      "tag": "0004_burly_daredevil",
+      "breakpoints": true
     }
   ]
 }

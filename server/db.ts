@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
 import {
   goals,
+  localCredentials,
   planEditRequests,
   planSegments,
   plans,
@@ -10,6 +11,7 @@ import {
   quizzes,
   tasks,
   type InsertUser,
+  type User,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -25,6 +27,12 @@ export class ActiveGoalConflictError extends Error {
 export class LearningStateError extends Error {
   constructor(message: string) {
     super(message);
+  }
+}
+
+export class LocalAuthConflictError extends Error {
+  constructor() {
+    super("اسم المستخدم مستخدم بالفعل.");
   }
 }
 
@@ -68,6 +76,44 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+export async function createLocalUser(input: { username: string; passwordHash: string }): Promise<User> {
+  const db = await requireDb();
+  try {
+    return await db.transaction(async (tx) => {
+      const inserted = await tx.insert(users).values({
+        openId: `local:${input.username}`,
+        name: input.username,
+        loginMethod: "local",
+        lastSignedIn: new Date(),
+      }).$returningId();
+      const userId = inserted[0]?.id;
+      if (!userId) throw new Error("تعذر إنشاء الحساب.");
+      await tx.insert(localCredentials).values({ userId, username: input.username, passwordHash: input.passwordHash });
+      const created = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!created[0]) throw new Error("تعذر قراءة الحساب المنشأ.");
+      return created[0];
+    });
+  } catch (error) {
+    if (isDuplicateKey(error)) throw new LocalAuthConflictError();
+    throw error;
+  }
+}
+
+export async function getLocalUserByUsername(username: string) {
+  const db = await requireDb();
+  const rows = await db.select({ user: users, passwordHash: localCredentials.passwordHash })
+    .from(localCredentials)
+    .innerJoin(users, eq(localCredentials.userId, users.id))
+    .where(eq(localCredentials.username, username))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function markLocalUserSignedIn(userId: number) {
+  const db = await requireDb();
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
 }
 
 export async function createGoal(userId: number, input: CreateGoalInput) {

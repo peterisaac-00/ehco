@@ -4,7 +4,6 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { PrimaryButton } from "@/components/primary-button";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
-import { startOAuthLogin } from "@/constants/oauth";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -32,7 +31,7 @@ export default function HomeScreen() {
           <Text style={styles.eyebrow}>EHCO</Text>
           <Text style={styles.heading}>مسار تعلمك، خطوة واضحة كل يوم</Text>
           <Text style={styles.copy}>سجّل دخولك لتبني خطة مخصصة وتحافظ على تقدمك بين أجهزتك.</Text>
-          <PrimaryButton label="تسجيل الدخول والبدء" onPress={() => void startOAuthLogin()} />
+          <PrimaryButton label="تسجيل الدخول والبدء" onPress={() => router.push("/login")} />
         </View>
       </ScreenContainer>
     );
