@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 
 export default function PlanScreen() {
   const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const activeGoal = trpc.goals.active.useQuery(undefined, { enabled: isAuthenticated });
   const plan = trpc.plans.getForGoal.useQuery({ goalId: activeGoal.data?.id ?? 0 }, { enabled: Boolean(activeGoal.data?.id) });
   const generate = trpc.plans.generateInitial.useMutation({
@@ -17,7 +18,14 @@ export default function PlanScreen() {
     onError: (error) => Alert.alert("تعذر إنشاء الخطة", error.message),
   });
   const approve = trpc.plans.approve.useMutation({
-    onSuccess: () => router.replace("/(tabs)"),
+    onSuccess: async () => {
+      await Promise.all([
+        utils.tasks.current.invalidate(),
+        utils.calendar.get.invalidate(),
+        utils.plans.getForGoal.invalidate(),
+      ]);
+      router.replace("/");
+    },
     onError: (error) => Alert.alert("تعذر اعتماد الخطة", error.message),
   });
   const [editRequest, setEditRequest] = useState("");
@@ -61,6 +69,10 @@ export default function PlanScreen() {
               <PrimaryButton label="تحديث المسودة" variant="secondary" disabled={editRequest.trim().length < 4} onPress={() => editPlan.mutate({ planId: plan.data!.id, request: editRequest.trim() })} loading={editPlan.isPending} />
               <PrimaryButton label="اعتماد الخطة وبدء اليوم الأول" onPress={() => approve.mutate({ goalId: activeGoal.data!.id })} loading={approve.isPending} />
             </View>}
+            {plan.data?.status === "approved" && <View style={styles.approvedCard}>
+              <Text style={styles.editLabel}>تم اعتماد الخطة وفتح أول مهمة.</Text>
+              <PrimaryButton label="فتح مهمة اليوم" onPress={() => router.replace("/")} />
+            </View>}
           </>
         )}
       </ScrollView>
@@ -88,4 +100,5 @@ const styles = StyleSheet.create({
   editCard: { gap: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", padding: 16, borderRadius: 18 },
   editLabel: { color: "#0F172A", fontSize: 15, fontWeight: "700", textAlign: "right" },
   editInput: { minHeight: 76, borderWidth: 1, borderColor: "#CBD5E1", borderRadius: 12, padding: 12, color: "#0F172A", textAlign: "right", textAlignVertical: "top" },
+  approvedCard: { gap: 10, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#A7F3D0", padding: 16, borderRadius: 18 },
 });
