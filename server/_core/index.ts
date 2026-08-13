@@ -7,6 +7,21 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { ENV } from "./env";
+
+function isAllowedCorsOrigin(origin: string, requestHost: string | undefined) {
+  if (ENV.corsAllowedOrigins.includes(origin)) return true;
+  if (!ENV.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  try {
+    const originUrl = new URL(origin);
+    const apiHost = (requestHost ?? "").split(":")[0];
+    const previewHost = /^\d+-(.+\.manus\.computer)$/.exec(apiHost)?.[1];
+    const originPreviewHost = /^\d+-(.+\.manus\.computer)$/.exec(originUrl.host)?.[1];
+    return originUrl.protocol === "https:" && Boolean(previewHost && originPreviewHost && previewHost === originPreviewHost);
+  } catch {
+    return false;
+  }
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -31,22 +46,25 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Enable CORS for all routes - reflect the request origin to support credentials
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    const allowed = typeof origin === "string" && isAllowedCorsOrigin(origin, req.headers.host);
+    if (allowed && origin) {
       res.header("Access-Control-Allow-Origin", origin);
+      res.header("Vary", "Origin");
+      res.header("Access-Control-Allow-Credentials", "true");
     }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header(
       "Access-Control-Allow-Headers",
       "Origin, X-Requested-With, Content-Type, Accept, Authorization",
     );
-    res.header("Access-Control-Allow-Credentials", "true");
-
-    // Handle preflight requests
     if (req.method === "OPTIONS") {
-      res.sendStatus(200);
+      if (origin && !allowed) {
+        res.sendStatus(403);
+        return;
+      }
+      res.sendStatus(204);
       return;
     }
     next();

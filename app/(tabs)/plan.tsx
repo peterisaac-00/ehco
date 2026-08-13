@@ -29,7 +29,11 @@ export default function PlanScreen() {
   });
   const [editRequest, setEditRequest] = useState("");
   const editPlan = trpc.plans.edit.useMutation({
-    onSuccess: () => { setEditRequest(""); void plan.refetch(); },
+    onSuccess: (result) => {
+      setEditRequest("");
+      void plan.refetch();
+      Alert.alert(result.decision === "accepted" ? "تم تحديث المسودة" : "تعذر تطبيق التعديل", result.reason);
+    },
     onError: (error) => Alert.alert("تعذر تعديل المسودة", error.message),
   });
 

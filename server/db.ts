@@ -254,6 +254,9 @@ export async function savePlanEdit(input: {
       }).where(and(eq(plans.id, input.planId), eq(plans.status, "draft")));
       await tx.delete(planSegments).where(eq(planSegments.planId, input.planId));
       await tx.insert(planSegments).values(buildPendingSegments(input.planId, input.draft.totalDurationDays));
+    } else {
+      await tx.update(plans).set({ editCount: record.plan.editCount + 1 })
+        .where(and(eq(plans.id, input.planId), eq(plans.status, "draft")));
     }
   });
 }
@@ -326,7 +329,6 @@ export async function reserveSegmentGeneration(userId: number, planId: number, s
   });
 }
 
-/** Materializes only the first complete segment atomically after the plan is approved. */
 export async function approvePlan(userId: number, goalId: number) {
   const db = await requireDb();
 
@@ -337,22 +339,25 @@ export async function approvePlan(userId: number, goalId: number) {
       .limit(1);
     const record = rows[0];
     if (!record) throw new LearningStateError("الخطة المطلوبة غير موجودة.");
-    if (record.plan.status !== "draft") throw new LearningStateError("تم اعتماد هذه الخطة مسبقًا.");
-
-    const firstSegment = await tx.select().from(planSegments).where(and(
+    const generatedSegments = await tx.select().from(planSegments).where(and(
       eq(planSegments.planId, record.plan.id),
-      eq(planSegments.startDay, 1),
       eq(planSegments.status, "generated"),
-    )).limit(1);
-    const segment = firstSegment[0];
-    if (!segment?.detailJson) {
+    )).orderBy(asc(planSegments.startDay));
+    const firstSegment = generatedSegments.find((segment) => segment.startDay === 1);
+    if (!firstSegment?.detailJson) {
       throw new LearningStateError("تُجهَّز الدفعة الأولى من الخطة الآن. حاول اعتماد الخطة بعد اكتمالها.");
     }
 
-    const taskCount = await materializeSegment(tx, record.plan.id, segment.detailJson, true);
+    let taskCount = 0;
+    for (const segment of generatedSegments) {
+      if (!segment.detailJson) continue;
+      taskCount += await materializeSegment(tx, record.plan.id, segment.detailJson, segment.startDay === 1);
+    }
 
-    await tx.update(plans).set({ status: "approved" })
-      .where(and(eq(plans.id, record.plan.id), eq(plans.status, "draft")));
+    if (record.plan.status === "draft") {
+      await tx.update(plans).set({ status: "approved" })
+        .where(and(eq(plans.id, record.plan.id), eq(plans.status, "draft")));
+    }
 
     return { planId: record.plan.id, taskCount };
   });
@@ -524,16 +529,24 @@ async function materializeSegment(
     status: unlockFirstTask && day.dayNumber === 1 && task.orderIndex === 1
       ? "unlocked" as const
       : "locked" as const,
+    quizQuestions: task.quizQuestions,
   })));
   if (segmentTasks.length === 0) return 0;
 
-  const taskIds = await tx.insert(tasks).values(segmentTasks).$returningId();
-  const questionsByTask = segment.days.flatMap((day) => day.tasks.map((task) => task.quizQuestions));
+  const existing = await tx.select({ dayNumber: tasks.dayNumber, orderIndex: tasks.orderIndex }).from(tasks).where(and(
+    eq(tasks.planId, planId),
+    inArray(tasks.dayNumber, [...new Set(segment.days.map((day) => day.dayNumber))]),
+  ));
+  const existingSequences = new Set(existing.map((task) => `${task.dayNumber}:${task.orderIndex}`));
+  const missingTasks = segmentTasks.filter((task) => !existingSequences.has(`${task.dayNumber}:${task.orderIndex}`));
+  if (missingTasks.length === 0) return 0;
+
+  const taskIds = await tx.insert(tasks).values(missingTasks.map(({ quizQuestions: _quizQuestions, ...task }) => task)).$returningId();
   await tx.insert(quizzes).values(taskIds.map((taskId, index) => ({
     taskId: taskId.id,
-    questions: questionsByTask[index],
+    questions: missingTasks[index].quizQuestions,
   })));
-  return segmentTasks.length;
+  return missingTasks.length;
 }
 
 function isDuplicateKey(error: unknown): boolean {

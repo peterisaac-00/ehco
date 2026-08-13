@@ -7,6 +7,7 @@ import { generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSIO
 import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
 import { sdk } from "./_core/sdk";
+import { consumeRateLimit } from "./rate-limit";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as learningDb from "./db";
@@ -18,13 +19,25 @@ const localAuthInputSchema = z.object({
   password: z.string().min(8, "كلمة المرور يجب أن تحتوي ثمانية أحرف على الأقل.").max(128),
 });
 
+function enforceRateLimit(scope: string, key: string, limit: number, windowMs: number) {
+  const result = consumeRateLimit({ scope, key, limit, windowMs });
+  if (!result.allowed) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `حاول مجددًا بعد ${result.retryAfterSeconds} ثانية.` });
+}
+
+function requestIdentity(req: { ip?: string; headers: Record<string, string | string[] | undefined> }) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const firstForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
+  return firstForwarded?.trim() || req.ip || "unknown";
+}
+
 export const appRouter = router({
   system: systemRouter,
   health: publicProcedure.query(() => ({ status: "ok" as const, service: "ehco-api" })),
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    register: publicProcedure.input(localAuthInputSchema).mutation(async ({ input }) => {
+    register: publicProcedure.input(localAuthInputSchema).mutation(async ({ ctx, input }) => {
       try {
+        enforceRateLimit("auth.register", requestIdentity(ctx.req), 5, 15 * 60 * 1000);
         const username = normalizeUsername(input.username);
         const user = await learningDb.createLocalUser({ username, passwordHash: await hashPassword(input.password) });
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name ?? username });
@@ -33,8 +46,9 @@ export const appRouter = router({
         throw toTrpcError(error);
       }
     }),
-    login: publicProcedure.input(localAuthInputSchema).mutation(async ({ input }) => {
+    login: publicProcedure.input(localAuthInputSchema).mutation(async ({ ctx, input }) => {
       try {
+        enforceRateLimit("auth.login", `${requestIdentity(ctx.req)}:${normalizeUsername(input.username)}`, 10, 15 * 60 * 1000);
         const username = normalizeUsername(input.username);
         const account = await learningDb.getLocalUserByUsername(username);
         if (!account || !(await verifyPassword(input.password, account.passwordHash))) {
@@ -80,6 +94,7 @@ export const appRouter = router({
     }),
     generateInitial: protectedProcedure.input(goalIdSchema).mutation(async ({ ctx, input }) => {
       try {
+        enforceRateLimit("plans.generate", String(ctx.user.id), 4, 10 * 60 * 1000);
         const goal = await learningDb.getGoalById(ctx.user.id, input.goalId);
         if (!goal) throw new TRPCError({ code: "NOT_FOUND", message: "الهدف المطلوب غير موجود." });
 
@@ -115,6 +130,7 @@ export const appRouter = router({
       .input(z.object({ planId: z.number().int().positive(), startDay: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         try {
+          enforceRateLimit("plans.segment", String(ctx.user.id), 12, 10 * 60 * 1000);
           const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, input.planId, input.startDay);
           if (reservation.state === "generated") return { alreadyGenerated: true };
           const segment = await generatePlanSegment({
@@ -131,28 +147,31 @@ export const appRouter = router({
       }),
     edit: protectedProcedure.input(planEditInputSchema).mutation(async ({ ctx, input }) => {
       try {
+        enforceRateLimit("plans.edit", String(ctx.user.id), 10, 30 * 60 * 1000);
         const record = await learningDb.getPlanById(ctx.user.id, input.planId);
         if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "مسودة الخطة غير موجودة." });
-        const draft = await revisePlanOutline({ goal: record.goal, currentOutline: record.plan.draftJson, request: input.request });
+        if (record.plan.status !== "draft") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "لا يمكن تعديل خطة تم اعتمادها." });
+        const revision = await revisePlanOutline({ goal: record.goal, currentOutline: record.plan.draftJson, request: input.request });
         await learningDb.savePlanEdit({
           userId: ctx.user.id,
           planId: input.planId,
           userInput: input.request,
-          decision: "accepted",
-          reason: "تم تعديل بنية المسار دون تغيير الهدف أو حدوده.",
-          draft,
+          decision: revision.decision,
+          reason: revision.reason,
+          draft: revision.decision === "accepted" ? revision.outline : undefined,
         });
+        if (revision.decision === "rejected") return { planId: input.planId, decision: revision.decision, reason: revision.reason, outline: record.plan.draftJson };
         const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, input.planId, 1);
         if (reservation.state === "reserved") {
           const segment = await generatePlanSegment({
             goal: reservation.goal,
-            outline: draft,
+            outline: revision.outline,
             startDay: reservation.segment.startDay,
             endDay: reservation.segment.endDay,
           });
           await learningDb.savePlanSegment({ userId: ctx.user.id, planId: input.planId, segment });
         }
-        return { planId: input.planId, outline: draft };
+        return { planId: input.planId, decision: revision.decision, reason: revision.reason, outline: revision.outline };
       } catch (error) {
         throw toTrpcError(error);
       }
