@@ -1,9 +1,9 @@
 import { COOKIE_NAME } from "../shared/const.js";
-import { createGoalInputSchema, planEditInputSchema, submitQuizInputSchema } from "../shared/learning";
+import { createGoalInputSchema, planBoundsInputSchema, planEditInputSchema, submitQuizInputSchema, validateStudyBounds } from "../shared/learning";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, revisePlanOutline } from "./learning-ai";
+import { generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline } from "./learning-ai";
 import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
 import { sdk } from "./_core/sdk";
@@ -14,6 +14,8 @@ import * as learningDb from "./db";
 
 const goalIdSchema = z.object({ goalId: z.number().int().positive() });
 const taskIdSchema = z.object({ taskId: z.number().int().positive() });
+const segmentInputSchema = z.object({ planId: z.number().int().positive(), startDay: z.number().int().positive() });
+const planBoundsMutationSchema = planBoundsInputSchema.extend({ planId: z.number().int().positive() });
 const localAuthInputSchema = z.object({
   username: z.string().trim().min(3, "اسم المستخدم يجب أن يحتوي ثلاثة أحرف على الأقل.").max(32).regex(/^[a-zA-Z0-9_]+$/, "استخدم حروفًا إنجليزية أو أرقامًا أو _ فقط."),
   password: z.string().min(8, "كلمة المرور يجب أن تحتوي ثمانية أحرف على الأقل.").max(128),
@@ -28,6 +30,19 @@ function requestIdentity(req: { ip?: string; headers: Record<string, string | st
   const forwarded = req.headers["x-forwarded-for"];
   const firstForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
   return firstForwarded?.trim() || req.ip || "unknown";
+}
+
+async function preparePlanSegment(userId: number, planId: number, startDay: number) {
+  const reservation = await learningDb.reserveSegmentGeneration(userId, planId, startDay);
+  if (reservation.state === "generated") return { alreadyGenerated: true, startDay: reservation.segment.startDay };
+  const segment = await generatePlanSegment({
+    goal: reservation.goal,
+    outline: reservation.plan.draftJson,
+    startDay: reservation.segment.startDay,
+    endDay: reservation.segment.endDay,
+  });
+  await learningDb.savePlanSegment({ userId, planId, segment });
+  return { alreadyGenerated: false, startDay: reservation.segment.startDay };
 }
 
 export const appRouter = router({
@@ -111,40 +126,43 @@ export const appRouter = router({
           aiModel: LEARNING_MODEL,
           promptVersion: PROMPT_VERSION,
         });
-        const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, planId, 1);
-        if (reservation.state === "reserved") {
-          const segment = await generatePlanSegment({
-            goal: reservation.goal,
-            outline,
-            startDay: reservation.segment.startDay,
-            endDay: reservation.segment.endDay,
-          });
-          await learningDb.savePlanSegment({ userId: ctx.user.id, planId, segment });
+        try {
+          await preparePlanSegment(ctx.user.id, planId, 1);
+          return { planId, outline, firstSegmentReady: true, firstSegmentFailed: false };
+        } catch (segmentError) {
+          await learningDb.markSegmentGenerationFailed(ctx.user.id, planId, 1, segmentError);
+          logServerError("learning.initial_segment_generation_failed", segmentError, { planId, userId: ctx.user.id });
+          return { planId, outline, firstSegmentReady: false, firstSegmentFailed: true };
         }
-        return { planId, outline, firstSegmentReady: true };
       } catch (error) {
         throw toTrpcError(error);
       }
     }),
     generateSegment: protectedProcedure
-      .input(z.object({ planId: z.number().int().positive(), startDay: z.number().int().positive() }))
+      .input(segmentInputSchema)
       .mutation(async ({ ctx, input }) => {
         try {
           enforceRateLimit("plans.segment", String(ctx.user.id), 12, 10 * 60 * 1000);
-          const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, input.planId, input.startDay);
-          if (reservation.state === "generated") return { alreadyGenerated: true };
-          const segment = await generatePlanSegment({
-            goal: reservation.goal,
-            outline: reservation.plan.draftJson,
-            startDay: reservation.segment.startDay,
-            endDay: reservation.segment.endDay,
-          });
-          await learningDb.savePlanSegment({ userId: ctx.user.id, planId: input.planId, segment });
-          return { alreadyGenerated: false };
+          return await preparePlanSegment(ctx.user.id, input.planId, input.startDay);
         } catch (error) {
+          await learningDb.markSegmentGenerationFailed(ctx.user.id, input.planId, input.startDay, error).catch(() => undefined);
           throw toTrpcError(error);
         }
       }),
+    retrySegment: protectedProcedure.input(segmentInputSchema).mutation(async ({ ctx, input }) => {
+      try {
+        enforceRateLimit("plans.segment_retry", String(ctx.user.id), 4, 10 * 60 * 1000);
+        const result = await preparePlanSegment(ctx.user.id, input.planId, input.startDay);
+        const nextTaskUnlocked = await learningDb.unlockSegmentStart(ctx.user.id, input.planId, result.startDay);
+        return { ...result, nextTaskUnlocked };
+      } catch (error) {
+        await learningDb.markSegmentGenerationFailed(ctx.user.id, input.planId, input.startDay, error).catch(() => undefined);
+        throw toTrpcError(error);
+      }
+    }),
+    failedSegments: protectedProcedure.input(z.object({ planId: z.number().int().positive() })).query(({ ctx, input }) =>
+      learningDb.getFailedPlanSegments(ctx.user.id, input.planId),
+    ),
     edit: protectedProcedure.input(planEditInputSchema).mutation(async ({ ctx, input }) => {
       try {
         enforceRateLimit("plans.edit", String(ctx.user.id), 10, 30 * 60 * 1000);
@@ -176,6 +194,40 @@ export const appRouter = router({
         throw toTrpcError(error);
       }
     }),
+    updateBounds: protectedProcedure.input(planBoundsMutationSchema).mutation(async ({ ctx, input }) => {
+      try {
+        enforceRateLimit("plans.bounds", String(ctx.user.id), 10, 30 * 60 * 1000);
+        const record = await learningDb.getPlanById(ctx.user.id, input.planId);
+        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "مسودة الخطة غير موجودة." });
+        if (record.plan.status !== "draft") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "لا يمكن تعديل خطة تم اعتمادها." });
+        const workload = record.plan.totalEstimatedMinutes || record.plan.totalDurationDays * record.plan.dailyMinutes;
+        const validation = validateStudyBounds(input, workload);
+        if (!validation.valid) throw new TRPCError({ code: "PRECONDITION_FAILED", message: validation.reason });
+        const outline = await regeneratePlanOutlineForBounds({
+          goal: record.goal,
+          currentOutline: record.plan.draftJson,
+          dailyMinutes: input.dailyMinutes,
+          durationDays: input.durationDays,
+        });
+        const result = await learningDb.updateDraftPlanBounds({
+          userId: ctx.user.id,
+          planId: input.planId,
+          dailyMinutes: input.dailyMinutes,
+          durationDays: input.durationDays,
+          draft: outline,
+        });
+        try {
+          await preparePlanSegment(ctx.user.id, input.planId, 1);
+          return { outline, bounds: result.bounds, firstSegmentReady: true, firstSegmentFailed: false };
+        } catch (segmentError) {
+          await learningDb.markSegmentGenerationFailed(ctx.user.id, input.planId, 1, segmentError);
+          logServerError("learning.bounds_first_segment_generation_failed", segmentError, { planId: input.planId, userId: ctx.user.id });
+          return { outline, bounds: result.bounds, firstSegmentReady: false, firstSegmentFailed: true };
+        }
+      } catch (error) {
+        throw toTrpcError(error);
+      }
+    }),
   }),
   calendar: router({
     get: protectedProcedure.query(({ ctx }) => learningDb.getCalendar(ctx.user.id)),
@@ -194,21 +246,13 @@ export const appRouter = router({
         const result = await learningDb.gradeQuiz(ctx.user.id, input.taskId, input.answers);
         if (!result.passed || !result.nextSegmentStartDay) return { ...result, nextSegmentPrepared: false };
         try {
-          const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, result.planId, result.nextSegmentStartDay);
-          if (reservation.state === "reserved") {
-            const segment = await generatePlanSegment({
-              goal: reservation.goal,
-              outline: reservation.plan.draftJson,
-              startDay: reservation.segment.startDay,
-              endDay: reservation.segment.endDay,
-            });
-            await learningDb.savePlanSegment({ userId: ctx.user.id, planId: result.planId, segment });
-          }
+          await preparePlanSegment(ctx.user.id, result.planId, result.nextSegmentStartDay);
           const unlocked = await learningDb.unlockSegmentStart(ctx.user.id, result.planId, result.nextSegmentStartDay);
-          return { ...result, nextTaskUnlocked: unlocked, nextSegmentPrepared: true };
+          return { ...result, nextTaskUnlocked: unlocked, nextSegmentPrepared: true, nextSegmentFailed: false };
         } catch (generationError) {
+          await learningDb.markSegmentGenerationFailed(ctx.user.id, result.planId, result.nextSegmentStartDay, generationError);
           logServerError("learning.next_segment_generation_failed", generationError, { planId: result.planId, userId: ctx.user.id });
-          return { ...result, nextSegmentPrepared: false };
+          return { ...result, nextSegmentPrepared: false, nextSegmentFailed: true };
         }
       } catch (error) {
         throw toTrpcError(error);

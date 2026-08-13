@@ -5,13 +5,18 @@ import { router } from "expo-router";
 import { PrimaryButton } from "@/components/primary-button";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
-import { disableDailyReminder, enableDailyReminder, isDailyReminderEnabled } from "@/lib/daily-reminder";
+import { disableDailyReminder, enableDailyReminder, isDailyReminderEnabled, syncDailyReminderTask } from "@/lib/daily-reminder";
+import { trpc } from "@/lib/trpc";
 
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout } = useAuth();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderLoading, setReminderLoading] = useState(false);
+  const currentTask = trpc.tasks.current.useQuery(undefined, { enabled: isAuthenticated });
   useEffect(() => { void isDailyReminderEnabled().then(setReminderEnabled); }, []);
+  useEffect(() => {
+    if (reminderEnabled) void syncDailyReminderTask(currentTask.data?.task.title);
+  }, [currentTask.data?.task.title, reminderEnabled]);
 
   const toggleReminder = async () => {
     setReminderLoading(true);
@@ -21,7 +26,7 @@ export default function ProfileScreen() {
         setReminderEnabled(false);
         return;
       }
-      const result = await enableDailyReminder();
+      const result = await enableDailyReminder(currentTask.data?.task.title);
       if (result === "enabled") setReminderEnabled(true);
       else Alert.alert(result === "unsupported" ? "غير متاح على الويب" : "إذن الإشعارات مطلوب", "يمكنك تفعيل التذكير من تطبيق الهاتف بعد منح الإذن.");
     } finally {

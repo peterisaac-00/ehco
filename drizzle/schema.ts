@@ -63,6 +63,7 @@ export const plans = mysqlTable("plans", {
   draftJson: json("draftJson").$type<LearningPlanOutline>().notNull(),
   aiModel: varchar("aiModel", { length: 100 }).notNull(),
   promptVersion: varchar("promptVersion", { length: 40 }).notNull(),
+  totalEstimatedMinutes: int("totalEstimatedMinutes").notNull().default(0),
   generationCount: int("generationCount").notNull().default(1),
   editCount: int("editCount").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -78,6 +79,8 @@ export const planSegments = mysqlTable("planSegments", {
   detailJson: json("detailJson").$type<LearningPlanSegment>(),
   generationAttempts: int("generationAttempts").notNull().default(0),
   generationStartedAt: timestamp("generationStartedAt"),
+  generationFailedAt: timestamp("generationFailedAt"),
+  generationFailureReason: varchar("generationFailureReason", { length: 500 }),
   generatedAt: timestamp("generatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [

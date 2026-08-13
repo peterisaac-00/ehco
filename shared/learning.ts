@@ -11,6 +11,7 @@ export const LEARNING_LIMITS = {
   passingScore: 70,
   maxPlanGenerations: 3,
   maxPlanEdits: 10,
+  maxStudyWorkloadMinutes: 43_200,
 } as const;
 
 export const currentLevelSchema = z.enum(["beginner", "intermediate", "advanced"]);
@@ -26,6 +27,40 @@ export const planBoundsInputSchema = z.object({
   dailyMinutes: z.number().int().min(LEARNING_LIMITS.minDailyMinutes).max(LEARNING_LIMITS.maxDailyMinutes),
   durationDays: z.number().int().min(LEARNING_LIMITS.minDurationDays).max(LEARNING_LIMITS.maxDurationDays),
 });
+
+export type StudyBounds = {
+  minDurationDays: number;
+  maxDurationDays: number;
+  totalEstimatedMinutes: number;
+};
+
+export function calculateStudyBounds(totalEstimatedMinutes: number): StudyBounds {
+  if (!Number.isInteger(totalEstimatedMinutes) || totalEstimatedMinutes < LEARNING_LIMITS.minDailyMinutes || totalEstimatedMinutes > LEARNING_LIMITS.maxStudyWorkloadMinutes) {
+    throw new Error("حجم العمل التقديري للخطة غير صالح.");
+  }
+  return {
+    totalEstimatedMinutes,
+    minDurationDays: Math.max(LEARNING_LIMITS.minDurationDays, Math.ceil(totalEstimatedMinutes / LEARNING_LIMITS.maxDailyMinutes)),
+    maxDurationDays: Math.min(LEARNING_LIMITS.maxDurationDays, Math.ceil(totalEstimatedMinutes / LEARNING_LIMITS.minDailyMinutes)),
+  };
+}
+
+export function validateStudyBounds(input: z.infer<typeof planBoundsInputSchema>, totalEstimatedMinutes: number): { valid: true; bounds: StudyBounds } | { valid: false; reason: string; bounds: StudyBounds } {
+  const parsed = planBoundsInputSchema.safeParse(input);
+  const bounds = calculateStudyBounds(totalEstimatedMinutes);
+  if (!parsed.success) return { valid: false, reason: "قيمة الوقت اليومي أو المدة خارج الحدود المسموحة.", bounds };
+  if (input.durationDays < bounds.minDurationDays || input.durationDays > bounds.maxDurationDays) {
+    return { valid: false, reason: `المدة المناسبة لهذا الحمل بين ${bounds.minDurationDays} و${bounds.maxDurationDays} يومًا.`, bounds };
+  }
+  const capacity = input.dailyMinutes * input.durationDays;
+  if (capacity < totalEstimatedMinutes) {
+    return { valid: false, reason: "الوقت اليومي والمدة لا يكفيان لإكمال حجم التعلم الحالي.", bounds };
+  }
+  if (capacity > Math.ceil(totalEstimatedMinutes * 1.25)) {
+    return { valid: false, reason: "الوقت اليومي والمدة أكبر بكثير من حجم التعلم الحالي. قلّل أحدهما.", bounds };
+  }
+  return { valid: true, bounds };
+}
 
 export const quizOptionSchema = z.object({
   id: z.string().min(1).max(80),
@@ -136,6 +171,17 @@ export function calculateQuizScore(
   const submitted = new Map(answers.map((answer) => [answer.questionId, answer.optionId]));
   const correct = questions.filter((question) => submitted.get(question.id) === question.answerId).length;
   return Math.round((correct / questions.length) * 100);
+}
+
+export function varyQuizQuestions(questions: QuizQuestion[], attemptNumber: number) {
+  if (questions.length === 0) return [];
+  const offset = attemptNumber % questions.length;
+  return questions.map((_, index) => questions[(index + offset) % questions.length]).map((question, questionIndex) => {
+    const optionOffset = (attemptNumber + questionIndex) % question.options.length;
+    const options = question.options.map((_, index) => question.options[(index + optionOffset) % question.options.length]);
+    const { answerId: _answerId, explanation: _explanation, ...safeQuestion } = question;
+    return { ...safeQuestion, options };
+  });
 }
 
 export type CurrentLevel = z.infer<typeof currentLevelSchema>;

@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
+import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, validateStudyBounds, varyQuizQuestions, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
 import {
   goals,
   localCredentials,
@@ -191,6 +191,7 @@ export async function saveDraftPlan(input: {
       await tx.update(plans).set({
         totalDurationDays: input.draft.totalDurationDays,
         dailyMinutes: input.draft.dailyMinutes,
+        totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
         draftJson: input.draft,
         aiModel: input.aiModel,
         promptVersion: input.promptVersion,
@@ -207,6 +208,7 @@ export async function saveDraftPlan(input: {
       goalId: input.goalId,
       totalDurationDays: input.draft.totalDurationDays,
       dailyMinutes: input.draft.dailyMinutes,
+      totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
       draftJson: input.draft,
       aiModel: input.aiModel,
       promptVersion: input.promptVersion,
@@ -261,6 +263,38 @@ export async function savePlanEdit(input: {
   });
 }
 
+export async function updateDraftPlanBounds(input: {
+  userId: number;
+  planId: number;
+  dailyMinutes: number;
+  durationDays: number;
+  draft: LearningPlanOutline;
+}) {
+  const db = await requireDb();
+  const record = await getPlanById(input.userId, input.planId);
+  if (!record || record.plan.status !== "draft") throw new LearningStateError("يمكن تعديل المدة والوقت في المسودة فقط.");
+  const workload = record.plan.totalEstimatedMinutes || record.plan.totalDurationDays * record.plan.dailyMinutes;
+  const validation = validateStudyBounds({ dailyMinutes: input.dailyMinutes, durationDays: input.durationDays }, workload);
+  if (!validation.valid) throw new LearningStateError(validation.reason);
+  if (input.draft.dailyMinutes !== input.dailyMinutes || input.draft.totalDurationDays !== input.durationDays) {
+    throw new LearningStateError("تفاصيل المسودة لا تطابق المدة أو الوقت المحدد.");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(plans).set({
+      dailyMinutes: input.dailyMinutes,
+      totalDurationDays: input.durationDays,
+      draftJson: input.draft,
+      editCount: record.plan.editCount + 1,
+    }).where(and(eq(plans.id, input.planId), eq(plans.status, "draft")));
+    await tx.update(goals).set({ dailyMinutes: input.dailyMinutes, targetDurationDays: input.durationDays })
+      .where(and(eq(goals.id, record.goal.id), eq(goals.userId, input.userId), eq(goals.status, "active")));
+    await tx.delete(planSegments).where(eq(planSegments.planId, input.planId));
+    await tx.insert(planSegments).values(buildPendingSegments(input.planId, input.durationDays));
+  });
+  return { workload, bounds: validation.bounds };
+}
+
 export async function savePlanSegment(input: {
   userId: number;
   planId: number;
@@ -286,6 +320,8 @@ export async function savePlanSegment(input: {
       detailJson: input.segment,
       generatedAt: new Date(),
       generationStartedAt: null,
+      generationFailedAt: null,
+      generationFailureReason: null,
     }).where(and(eq(planSegments.id, record.segment.id), eq(planSegments.status, "pending")));
 
     if (record.plan.status === "approved") {
@@ -293,6 +329,38 @@ export async function savePlanSegment(input: {
     }
     return record.segment.id;
   });
+}
+
+/** Persists a recoverable failure after a reserved Gemini generation attempt. */
+export async function markSegmentGenerationFailed(userId: number, planId: number, startDay: number, error: unknown) {
+  const db = await requireDb();
+  const owned = await getPlanById(userId, planId);
+  if (!owned) throw new LearningStateError("الخطة المطلوبة غير موجودة.");
+  const message = error instanceof Error ? error.message : "تعذر تجهيز الدفعة التالية.";
+  await db.update(planSegments).set({
+    generationStartedAt: null,
+    generationFailedAt: new Date(),
+    generationFailureReason: message.slice(0, 500),
+  }).where(and(
+    eq(planSegments.planId, planId),
+    eq(planSegments.startDay, startDay),
+    eq(planSegments.status, "pending"),
+  ));
+}
+
+export async function getFailedPlanSegments(userId: number, planId: number) {
+  const db = await requireDb();
+  const rows = await db.select({
+    startDay: planSegments.startDay,
+    endDay: planSegments.endDay,
+    generationAttempts: planSegments.generationAttempts,
+    failureReason: planSegments.generationFailureReason,
+    failedAt: planSegments.generationFailedAt,
+  }).from(planSegments)
+    .innerJoin(plans, eq(planSegments.planId, plans.id))
+    .innerJoin(goals, eq(plans.goalId, goals.id))
+    .where(and(eq(planSegments.planId, planId), eq(goals.userId, userId), eq(planSegments.status, "pending")));
+  return rows.filter((segment) => Boolean(segment.failedAt));
 }
 
 /** Acquires a short conditional lease before a costly Gemini call for a segment. */
@@ -418,9 +486,12 @@ export async function beginQuiz(userId: number, taskId: number) {
       .where(and(eq(tasks.id, taskId), eq(tasks.status, "unlocked")));
   }
 
+  const attempts = await db.select({ id: quizAttempts.id }).from(quizAttempts)
+    .where(and(eq(quizAttempts.quizId, record.quiz.id), eq(quizAttempts.userId, userId)));
   return {
     task: { id: record.task.id, title: record.task.title, description: record.task.description },
-    questions: record.quiz.questions.map(({ answerId: _answerId, explanation: _explanation, ...question }) => question),
+    questions: varyQuizQuestions(record.quiz.questions, attempts.length),
+    attemptNumber: attempts.length + 1,
   };
 }
 
@@ -496,6 +567,19 @@ export async function unlockSegmentStart(userId: number, planId: number, startDa
     const existingOpen = await tx.select({ id: tasks.id }).from(tasks)
       .where(and(eq(tasks.planId, planId), inArray(tasks.status, ["unlocked", "in_quiz"]))).limit(1);
     if (existingOpen[0]) return false;
+
+    const incompleteEarlierTask = await tx.select({ id: tasks.id }).from(tasks).where(and(
+      eq(tasks.planId, planId),
+      lt(tasks.dayNumber, startDay),
+      or(eq(tasks.status, "locked"), eq(tasks.status, "unlocked"), eq(tasks.status, "in_quiz")),
+    )).limit(1);
+    if (incompleteEarlierTask[0]) return false;
+    const pendingEarlierSegment = await tx.select({ id: planSegments.id }).from(planSegments).where(and(
+      eq(planSegments.planId, planId),
+      lt(planSegments.startDay, startDay),
+      eq(planSegments.status, "pending"),
+    )).limit(1);
+    if (pendingEarlierSegment[0]) return false;
 
     const updated = await tx.update(tasks).set({ status: "unlocked" }).where(and(
       eq(tasks.planId, planId),
