@@ -92,6 +92,8 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-notifications",
+    "expo-font",
+    "expo-web-browser",
     [
       "expo-audio",
       {

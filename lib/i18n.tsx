@@ -495,13 +495,18 @@ function interpolate(template: string, values?: TranslationValues) {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: isAuthLoading } = useAuth();
   const [language, setLocalLanguage] = useState<AppLanguage>("ar");
   const [isReady, setIsReady] = useState(false);
   const languageQuery = trpc.preferences.language.useQuery(undefined, {
-    enabled: isAuthenticated,
+    // On native, the persisted session is resolved asynchronously.  Waiting
+    // for that read avoids issuing a startup request with an incomplete auth
+    // state and leaves AsyncStorage as a safe fallback when the network is
+    // unavailable in Expo Go.
+    enabled: isAuthenticated && !isAuthLoading,
     retry: false,
-    refetchOnMount: true,
+    refetchOnMount: false,
+    throwOnError: false,
   });
   const setLanguageMutation = trpc.preferences.setLanguage.useMutation();
 
@@ -550,7 +555,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     t,
   }), [isReady, language, setLanguage, t]);
 
-  return <LanguageContext.Provider value={value}><View style={{ flex: 1, direction: value.isRTL ? "rtl" : "ltr" }}>{children}</View></LanguageContext.Provider>;
+  return <LanguageContext.Provider value={value}><View style={{ flex: 1 }}>{children}</View></LanguageContext.Provider>;
 }
 
 export function useLanguage() {
