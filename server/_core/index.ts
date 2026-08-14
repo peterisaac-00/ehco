@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
@@ -87,6 +88,17 @@ async function startServer() {
       createContext,
     }),
   );
+
+  // The deployed mobile project also provides a web fallback. Serve the Expo
+  // static export in production while keeping all API routes above intact.
+  if (process.env.NODE_ENV === "production") {
+    const webExportDir = path.resolve(process.cwd(), "dist", "client");
+    const webEntry = path.join(webExportDir, "index.html");
+    app.use(express.static(webExportDir));
+    app.get("*", (_req, res) => {
+      res.sendFile(webEntry);
+    });
+  }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
