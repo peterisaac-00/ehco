@@ -7,7 +7,7 @@ const notifications = vi.hoisted(() => ({
   requestPermissionsAsync: vi.fn(),
   setNotificationChannelAsync: vi.fn(),
   scheduleNotificationAsync: vi.fn(),
-  cancelScheduledNotificationAsync: vi.fn(),
+  cancelScheduledNotificationAsync: vi.fn().mockResolvedValue(undefined),
   AndroidImportance: { DEFAULT: 3 },
   SchedulableTriggerInputTypes: { DAILY: "daily" },
 }));
@@ -29,6 +29,7 @@ describe("daily task-aware reminder", () => {
     storage.clear();
     vi.clearAllMocks();
     notifications.getPermissionsAsync.mockResolvedValue({ status: "granted" });
+    notifications.cancelScheduledNotificationAsync.mockResolvedValue(undefined);
     notifications.scheduleNotificationAsync.mockResolvedValueOnce("reminder-1").mockResolvedValueOnce("reminder-2");
   });
 
