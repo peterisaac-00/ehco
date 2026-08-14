@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
-import { createGoalInputSchema, planBoundsInputSchema, planEditInputSchema, submitQuizInputSchema, validateStudyBounds } from "../shared/learning";
+import { contentLanguageSchema, createGoalInputSchema, planBoundsInputSchema, planEditInputSchema, submitQuizInputSchema, validateStudyBounds } from "../shared/learning";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -35,8 +35,9 @@ function requestIdentity(req: { ip?: string; headers: Record<string, string | st
 async function preparePlanSegment(userId: number, planId: number, startDay: number) {
   const reservation = await learningDb.reserveSegmentGeneration(userId, planId, startDay);
   if (reservation.state === "generated") return { alreadyGenerated: true, startDay: reservation.segment.startDay };
+  const language = await learningDb.getUserLanguage(userId);
   const segment = await generatePlanSegment({
-    goal: reservation.goal,
+    goal: { ...reservation.goal, language },
     outline: reservation.plan.draftJson,
     startDay: reservation.segment.startDay,
     endDay: reservation.segment.endDay,
@@ -84,6 +85,12 @@ export const appRouter = router({
       } as const;
     }),
   }),
+  preferences: router({
+    language: protectedProcedure.query(({ ctx }) => learningDb.getUserLanguage(ctx.user.id)),
+    setLanguage: protectedProcedure.input(contentLanguageSchema).mutation(async ({ ctx, input }) => ({
+      language: await learningDb.setUserLanguage(ctx.user.id, input),
+    })),
+  }),
   goals: router({
     active: protectedProcedure.query(({ ctx }) => learningDb.getActiveGoal(ctx.user.id)),
     create: protectedProcedure.input(createGoalInputSchema).mutation(async ({ ctx, input }) => {
@@ -118,7 +125,8 @@ export const appRouter = router({
           throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "تم بلوغ الحد الأقصى لإعادة إنشاء هذه الخطة." });
         }
 
-        const outline = await generatePlanOutline(goal);
+        const language = await learningDb.getUserLanguage(ctx.user.id);
+        const outline = await generatePlanOutline({ ...goal, language });
         const planId = await learningDb.saveDraftPlan({
           userId: ctx.user.id,
           goalId: input.goalId,
@@ -169,7 +177,8 @@ export const appRouter = router({
         const record = await learningDb.getPlanById(ctx.user.id, input.planId);
         if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "مسودة الخطة غير موجودة." });
         if (record.plan.status !== "draft") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "لا يمكن تعديل خطة تم اعتمادها." });
-        const revision = await revisePlanOutline({ goal: record.goal, currentOutline: record.plan.draftJson, request: input.request });
+        const language = await learningDb.getUserLanguage(ctx.user.id);
+        const revision = await revisePlanOutline({ goal: { ...record.goal, language }, currentOutline: record.plan.draftJson, request: input.request });
         await learningDb.savePlanEdit({
           userId: ctx.user.id,
           planId: input.planId,
@@ -182,7 +191,7 @@ export const appRouter = router({
         const reservation = await learningDb.reserveSegmentGeneration(ctx.user.id, input.planId, 1);
         if (reservation.state === "reserved") {
           const segment = await generatePlanSegment({
-            goal: reservation.goal,
+            goal: { ...reservation.goal, language },
             outline: revision.outline,
             startDay: reservation.segment.startDay,
             endDay: reservation.segment.endDay,
@@ -203,8 +212,9 @@ export const appRouter = router({
         const workload = record.plan.totalEstimatedMinutes || record.plan.totalDurationDays * record.plan.dailyMinutes;
         const validation = validateStudyBounds(input, workload);
         if (!validation.valid) throw new TRPCError({ code: "PRECONDITION_FAILED", message: validation.reason });
+        const language = await learningDb.getUserLanguage(ctx.user.id);
         const outline = await regeneratePlanOutlineForBounds({
-          goal: record.goal,
+          goal: { ...record.goal, language },
           currentOutline: record.plan.draftJson,
           dailyMinutes: input.dailyMinutes,
           durationDays: input.durationDays,

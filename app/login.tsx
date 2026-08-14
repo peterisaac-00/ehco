@@ -5,16 +5,18 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-na
 import { AuthCard, AuthErrorMessage, AuthField, AuthHero, AuthSubmitButton, AuthSwitch, LifestyleDecoration, PasswordRule } from "@/components/auth/echo-auth-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import * as Auth from "@/lib/_core/auth";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 export default function LoginScreen() {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const utils = trpc.useUtils();
 
-  const completeAuth = async (result: { sessionToken: string; user: { id: number; openId: string; name: string | null; email: string | null; loginMethod: string | null; lastSignedIn: Date } }) => {
+  const completeAuth = async (result: { sessionToken: string; user: { id: number; openId: string; name: string | null; email: string | null; loginMethod: string | null; preferredLanguage: "ar" | "en"; lastSignedIn: Date } }) => {
     await Auth.setSessionToken(result.sessionToken);
     await Auth.setUserInfo(result.user);
     await utils.invalidate();
@@ -48,31 +50,31 @@ export default function LoginScreen() {
           <AuthCard>
             <AuthField
               icon="person-outline"
-              label="اسم المستخدم"
+              label={t("auth.username")}
               value={username}
               onChangeText={setUsername}
-              placeholder="مثال: peter_01"
+              placeholder={t("auth.usernamePlaceholder")}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
               maxLength={32}
-              help="حروف إنجليزية أو أرقام أو _، من 3 إلى 32 حرفًا."
-              error={username.length > 0 && !validUsername ? "تحقق من صيغة اسم المستخدم." : undefined}
+              help={t("auth.usernameHelp")}
+              error={username.length > 0 && !validUsername ? t("auth.usernameValidation") : undefined}
             />
             <AuthField
               icon="lock-outline"
-              label="كلمة المرور"
+              label={t("auth.password")}
               value={password}
               onChangeText={setPassword}
-              placeholder="ثمانية أحرف على الأقل"
+              placeholder={t("auth.passwordPlaceholder")}
               secureTextEntry
               returnKeyType={mode === "register" ? "next" : "done"}
               maxLength={128}
               onSubmitEditing={mode === "login" && canSubmit ? submit : undefined}
             />
-            {mode === "register" && <><PasswordRule /><AuthField icon="lock-outline" label="تأكيد كلمة المرور" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="أعد كتابة كلمة المرور" secureTextEntry returnKeyType="done" maxLength={128} onSubmitEditing={canSubmit ? submit : undefined} error={confirmPassword.length > 0 && !passwordMatches ? "كلمتا المرور غير متطابقتين." : undefined} /></>}
+            {mode === "register" && <><PasswordRule /><AuthField icon="lock-outline" label={t("auth.confirmPassword")} value={confirmPassword} onChangeText={setConfirmPassword} placeholder={t("auth.confirmPasswordPlaceholder")} secureTextEntry returnKeyType="done" maxLength={128} onSubmitEditing={canSubmit ? submit : undefined} error={confirmPassword.length > 0 && !passwordMatches ? t("auth.passwordMismatch") : undefined} /></>}
             {activeError ? <AuthErrorMessage message={activeError} /> : null}
-            <AuthSubmitButton label={mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب والبدء"} onPress={submit} disabled={!canSubmit} loading={pending} />
+            <AuthSubmitButton label={mode === "login" ? t("auth.login") : t("auth.register")} onPress={submit} disabled={!canSubmit} loading={pending} />
             <AuthSwitch mode={mode} onPress={switchMode} />
           </AuthCard>
           <LifestyleDecoration />

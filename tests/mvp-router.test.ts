@@ -15,6 +15,8 @@ const db = vi.hoisted(() => ({
   beginQuiz: vi.fn(),
   approvePlan: vi.fn(),
   getFailedPlanSegments: vi.fn(),
+  getUserLanguage: vi.fn().mockResolvedValue("ar"),
+  setUserLanguage: vi.fn().mockImplementation(async (_userId: number, language: "ar" | "en") => language),
 }));
 
 const ai = vi.hoisted(() => ({
@@ -79,6 +81,7 @@ function callerFor(userId = 1) {
       name: `User ${userId}`,
       loginMethod: "local",
       role: "user",
+      preferredLanguage: "ar",
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
@@ -125,12 +128,21 @@ describe("MVP router business rules", () => {
   });
 
   it("7. prepares and unlocks the first task of segment two", async () => {
+    db.getUserLanguage.mockResolvedValue("en");
     db.reserveSegmentGeneration.mockResolvedValue({ state: "reserved", plan: { draftJson: outline }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
     ai.generatePlanSegment.mockResolvedValue({ startDay: 8, endDay: 14, days: [] });
     db.savePlanSegment.mockResolvedValue(8);
     db.unlockSegmentStart.mockResolvedValue(true);
     await expect(callerFor().plans.retrySegment({ planId: 44, startDay: 8 })).resolves.toMatchObject({ alreadyGenerated: false, startDay: 8, nextTaskUnlocked: true });
     expect(db.savePlanSegment).toHaveBeenCalledTimes(1);
+    expect(ai.generatePlanSegment).toHaveBeenCalledWith(expect.objectContaining({ goal: expect.objectContaining({ language: "en" }) }));
+  });
+
+  it("stores and returns the account language preference", async () => {
+    db.getUserLanguage.mockResolvedValue("ar");
+    await expect(callerFor().preferences.language()).resolves.toBe("ar");
+    await expect(callerFor().preferences.setLanguage("en")).resolves.toEqual({ language: "en" });
+    expect(db.setUserLanguage).toHaveBeenCalledWith(1, "en");
   });
 
   it("8. records a recoverable segment-generation failure", async () => {

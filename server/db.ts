@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, validateStudyBounds, varyQuizQuestions, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
+import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, validateStudyBounds, varyQuizQuestions, type ContentLanguage, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
 import {
   goals,
   localCredentials,
@@ -114,6 +114,23 @@ export async function getLocalUserByUsername(username: string) {
 export async function markLocalUserSignedIn(userId: number) {
   const db = await requireDb();
   await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
+}
+
+/** Returns the account's output language, safely defaulting existing accounts to Arabic. */
+export async function getUserLanguage(userId: number): Promise<ContentLanguage> {
+  const db = await requireDb();
+  const result = await db.select({ preferredLanguage: users.preferredLanguage })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return result[0]?.preferredLanguage ?? "ar";
+}
+
+/** Persists a user's language so app UI and future AI content remain consistent across devices. */
+export async function setUserLanguage(userId: number, language: ContentLanguage): Promise<ContentLanguage> {
+  const db = await requireDb();
+  await db.update(users).set({ preferredLanguage: language }).where(eq(users.id, userId));
+  return language;
 }
 
 export async function createGoal(userId: number, input: CreateGoalInput) {

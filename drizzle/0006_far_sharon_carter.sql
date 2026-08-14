@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `preferredLanguage` enum('ar','en') DEFAULT 'ar' NOT NULL;

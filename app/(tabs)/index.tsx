@@ -16,6 +16,7 @@ import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from "re
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { isDailyReminderEnabled } from "@/lib/daily-reminder";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 const COLORS = {
@@ -103,18 +104,20 @@ export default function HomeScreen() {
 }
 
 function HomeLoading() {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
       <View style={styles.loadingBloom}>
         <MaterialIcons name="spa" size={30} color={COLORS.forest} />
       </View>
       <ActivityIndicator color={COLORS.forest} size="small" />
-      <Text style={styles.loadingCopy}>نجهّز مسارك بهدوء…</Text>
+      <Text style={styles.loadingCopy}>{t("common.loadingJourney")}</Text>
     </ScreenContainer>
   );
 }
 
 function GuestHome() {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" edges={["top", "left", "right"]}>
       <View style={styles.guestRoot}>
@@ -124,19 +127,17 @@ function GuestHome() {
           <Text style={styles.guestBrandName}>echo</Text>
         </View>
         <View style={styles.guestHero}>
-          <Text style={styles.guestHeadline}>
-            Your plan.{"\n"}Your progress.{"\n"}<Text style={styles.guestHeadlineAccent}>Your life.</Text>
-          </Text>
-          <Text style={styles.guestCopy}>Echo helps you build the skills you need, one step at a time.</Text>
+          <Text style={styles.guestHeadline}>{t("home.guestHeadline")}</Text>
+          <Text style={styles.guestCopy}>{t("home.guestCopy")}</Text>
         </View>
         <View style={styles.guestActionSheet}>
           <HomeAction
-            label="تسجيل الدخول والبدء"
+            label={t("home.signInStart")}
             icon="spa"
             onPress={() => router.push("/login")}
           />
           <Pressable onPress={() => router.push("/login")} style={({ pressed }) => [styles.guestSecondaryAction, pressed && styles.pressedText]}>
-            <Text style={styles.guestSecondaryText}>أو إنشاء حساب جديد</Text>
+            <Text style={styles.guestSecondaryText}>{t("home.orCreateAccount")}</Text>
           </Pressable>
         </View>
       </View>
@@ -184,12 +185,13 @@ function GuestLandscapeScene() {
 }
 
 function HomeHeader({ name, reminderEnabled }: { name?: string; reminderEnabled: boolean }) {
+  const { t } = useLanguage();
   return (
     <Animated.View style={styles.header}>
       <View style={styles.headerTop}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="إعدادات التنبيه"
+          accessibilityLabel={t("home.reminderSettings")}
           onPress={() => router.push("/(tabs)/profile")}
           style={({ pressed }) => [styles.notificationButton, pressed && styles.notificationPressed]}
         >
@@ -197,16 +199,17 @@ function HomeHeader({ name, reminderEnabled }: { name?: string; reminderEnabled:
           {reminderEnabled && <View style={styles.notificationDot} />}
         </Pressable>
         <View style={styles.greetingBlock}>
-          <Text style={styles.greeting}>مرحبًا، {name ?? "بك"} <Text style={styles.greetingLeaf}>⌁</Text></Text>
+          <Text style={styles.greeting}>{t("home.greeting", { name: name ?? t("home.guestName") })} <Text style={styles.greetingLeaf}>⌁</Text></Text>
         </View>
       </View>
-      <Text style={styles.screenTitle}>مهمتك التالية</Text>
-      <Text style={styles.headerCopy}>استمر، كل خطوة تقرّبك من هدفك.</Text>
+      <Text style={styles.screenTitle}>{t("home.nextTask")}</Text>
+      <Text style={styles.headerCopy}>{t("home.keepGoing")}</Text>
     </Animated.View>
   );
 }
 
 function CurrentTaskCard({ task, goal }: { task: CurrentTask; goal: CurrentGoal }) {
+  const { t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -232,22 +235,22 @@ function CurrentTaskCard({ task, goal }: { task: CurrentTask; goal: CurrentGoal 
       <Image source={{ uri: TASK_DESK_ILLUSTRATION }} style={styles.taskIllustration} resizeMode="cover" />
       <View style={styles.taskCopyBlock}>
         <View style={styles.dayBadge}>
-          <Text style={styles.dayBadgeText}>اليوم {task.dayNumber} من {goal.targetDurationDays}</Text>
+          <Text style={styles.dayBadgeText}>{t("home.dayOf", { day: task.dayNumber, total: goal.targetDurationDays })}</Text>
         </View>
         <Text numberOfLines={3} style={styles.taskTitle}>{task.title}</Text>
         <View style={styles.taskMeta}>
           <View style={styles.metaItem}>
             <MaterialIcons name="schedule" size={17} color={COLORS.forestMuted} />
-            <Text style={styles.metaText}>{task.estimatedMinutes} دقيقة</Text>
+            <Text style={styles.metaText}>{t("common.minutes", { count: task.estimatedMinutes })}</Text>
           </View>
           <View style={styles.metaItem}>
             <MaterialIcons name={task.status === "in_quiz" ? "fact-check" : "bookmark-border"} size={17} color={COLORS.forestMuted} />
-            <Text style={styles.metaText}>{task.status === "in_quiz" ? "اختبار مستمر" : "متاحة الآن"}</Text>
+            <Text style={styles.metaText}>{task.status === "in_quiz" ? t("home.quizActive") : t("home.availableNow")}</Text>
           </View>
         </View>
       </View>
       <HomeAction
-        label="ابدأ المهمة والاختبار"
+        label={t("home.startTask")}
         icon="play-circle-filled"
         onPress={() => router.push({ pathname: "/quiz/[taskId]", params: { taskId: String(task.id) } })}
         style={styles.taskAction}
@@ -257,6 +260,7 @@ function CurrentTaskCard({ task, goal }: { task: CurrentTask; goal: CurrentGoal 
 }
 
 function TaskLoadingCard() {
+  const { t } = useLanguage();
   return (
     <View style={[styles.taskCard, styles.taskLoadingCard]}>
       <View style={styles.loadingCardIcon}><ActivityIndicator color={COLORS.forest} size="small" /></View>
@@ -264,47 +268,50 @@ function TaskLoadingCard() {
         <View style={[styles.loadingLine, styles.loadingLineWide]} />
         <View style={[styles.loadingLine, styles.loadingLineShort]} />
       </View>
-      <Text style={styles.cardLoadingCopy}>نجهّز تفاصيل مهمتك التالية…</Text>
+      <Text style={styles.cardLoadingCopy}>{t("home.loadingTask")}</Text>
     </View>
   );
 }
 
 function NoTaskCard() {
+  const { t } = useLanguage();
   return (
     <View style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
         <MaterialIcons name="lock-outline" size={35} color={COLORS.forest} />
       </View>
       <View style={styles.emptyCopyBlock}>
-        <Text style={styles.emptyTitle}>لا توجد مهمة متاحة الآن</Text>
-        <Text style={styles.emptyCopy}>جميع المهام مكتملة حاليًا. راجع خطتك لمعرفة خطوتك القادمة.</Text>
-        <HomeAction label="الذهاب إلى الخطة" icon="map" variant="soft" onPress={() => router.push("/(tabs)/plan")} style={styles.emptyAction} />
+        <Text style={styles.emptyTitle}>{t("home.noTask")}</Text>
+        <Text style={styles.emptyCopy}>{t("home.noTaskCopy")}</Text>
+        <HomeAction label={t("home.goToPlan")} icon="map" variant="soft" onPress={() => router.push("/(tabs)/plan")} style={styles.emptyAction} />
       </View>
     </View>
   );
 }
 
 function HomeError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLanguage();
   return (
     <View style={styles.errorCard}>
       <View style={styles.errorIcon}><MaterialIcons name="cloud-off" size={30} color={COLORS.alert} /></View>
-      <Text style={styles.errorTitle}>لم نتمكن من تحميل مهمتك الآن</Text>
-      <Text style={styles.errorCopy}>تحقّق من اتصالك ثم حاول مرة أخرى بهدوء.</Text>
-      <HomeAction label="إعادة المحاولة" icon="refresh" variant="soft" onPress={onRetry} style={styles.errorAction} />
+      <Text style={styles.errorTitle}>{t("home.taskLoadError")}</Text>
+      <Text style={styles.errorCopy}>{t("home.taskLoadErrorCopy")}</Text>
+      <HomeAction label={t("common.retry")} icon="refresh" variant="soft" onPress={onRetry} style={styles.errorAction} />
     </View>
   );
 }
 
 function ProgressGuide() {
+  const { t } = useLanguage();
   const steps = [
-    { icon: "task-alt" as const, title: "أكمل المهمة اليومية", copy: "اقرأ، تعلّم وطبّق بما يناسبك." },
-    { icon: "quiz" as const, title: "اختبر فهمك", copy: "أجب عن الأسئلة لتحقق من فهمك." },
-    { icon: "verified" as const, title: "حقّق نسبة 70% أو أكثر", copy: "لتُفتح المهمة التالية وتستمر في رحلتك." },
+    { icon: "task-alt" as const, title: t("home.progressStep1.title"), copy: t("home.progressStep1.copy") },
+    { icon: "quiz" as const, title: t("home.progressStep2.title"), copy: t("home.progressStep2.copy") },
+    { icon: "verified" as const, title: t("home.progressStep3.title"), copy: t("home.progressStep3.copy") },
   ];
 
   return (
     <View style={styles.progressCard}>
-      <Text style={styles.progressTitle}>كيف يعمل تقدّمك؟</Text>
+      <Text style={styles.progressTitle}>{t("home.progressHow")}</Text>
       <View style={styles.progressInner}>
         <View style={styles.progressSteps}>
           {steps.map((step) => (

@@ -15,6 +15,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { isDailyReminderEnabled } from "@/lib/daily-reminder";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 const COLORS = {
@@ -49,6 +50,7 @@ type CalendarState = "locked" | "current" | "completed";
 
 export default function CalendarScreen() {
   const { isAuthenticated } = useAuth();
+  const { language, t } = useLanguage();
   const navigation = useNavigation();
   const calendar = trpc.calendar.get.useQuery(undefined, { enabled: isAuthenticated });
   const reminderEnabled = useReminderStatus(isAuthenticated);
@@ -67,25 +69,25 @@ export default function CalendarScreen() {
   }, [navigation]);
 
   if (!isAuthenticated) {
-    return <CalendarEntry title="سجّل الدخول أولًا" copy="سجّل الدخول لتشاهد تقويم تقدمك وتتابع مهامك." label="تسجيل الدخول" icon="login" onPress={() => router.push("/login")} />;
+    return <CalendarEntry title={t("calendar.loginTitle")} copy={t("calendar.loginCopy")} label={t("common.login")} icon="login" onPress={() => router.push("/login")} />;
   }
   if (calendar.isLoading) return <CalendarLoading />;
   if (calendar.isError) {
-    return <CalendarEntry title="تعذر تحميل التقويم" copy="تحقق من الاتصال ثم حاول مرة أخرى." label="إعادة المحاولة" icon="refresh" onPress={() => void calendar.refetch()} error />;
+    return <CalendarEntry title={t("calendar.loadError")} copy={t("calendar.loadErrorCopy")} label={t("common.retry")} icon="refresh" onPress={() => void calendar.refetch()} error />;
   }
   if (!calendar.data) {
-    return <CalendarEntry title="لا يوجد هدف نشط" copy="ابدأ بهدف واحد، وسيظهر تقدمك اليومي هنا." label="إعداد الهدف" icon="flag" onPress={() => router.push("/onboarding")} />;
+    return <CalendarEntry title={t("calendar.noGoal")} copy={t("calendar.noGoalCopy")} label={t("common.setupGoal")} icon="flag" onPress={() => router.push("/onboarding")} />;
   }
   if (!calendar.data.plan || calendar.data.plan.status !== "approved") {
-    return <CalendarEntry title="الخطة في انتظار الاعتماد" copy="أنشئ مسودة خطتك وراجعها، ثم اعتمدها لفتح تقويم المهام." label="فتح الخطة" icon="map" onPress={() => router.push("/(tabs)/plan")} />;
+    return <CalendarEntry title={t("calendar.awaitingApproval")} copy={t("calendar.awaitingApprovalCopy")} label={t("common.openPlan")} icon="map" onPress={() => router.push("/(tabs)/plan")} />;
   }
   if (days.length === 0) {
-    return <CalendarEntry title="تُجهَّز المهام" copy="لا توجد مهام جاهزة للعرض بعد. عد إلى الخطة للتحقق من الدفعة الأولى." label="فتح الخطة" icon="map" onPress={() => router.push("/(tabs)/plan")} />;
+    return <CalendarEntry title={t("calendar.tasksPreparing")} copy={t("calendar.tasksPreparingCopy")} label={t("common.openPlan")} icon="map" onPress={() => router.push("/(tabs)/plan")} />;
   }
 
   const currentTask = findCurrentTask(days);
   const completedDays = days.filter((day) => getDayState(day) === "completed").length;
-  const monthLabel = formatPlanMonth(calendar.data.plan.createdAt);
+  const monthLabel = formatPlanMonth(calendar.data.plan.createdAt, language);
 
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]">
@@ -111,6 +113,7 @@ function useReminderStatus(isAuthenticated: boolean) {
 }
 
 function CalendarHero({ reminderEnabled }: { reminderEnabled: boolean }) {
+  const { t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -120,14 +123,14 @@ function CalendarHero({ reminderEnabled }: { reminderEnabled: boolean }) {
       <Image source={{ uri: HERO_ILLUSTRATION }} style={styles.heroIllustration} resizeMode="cover" />
       <View style={styles.heroTopRow}>
         <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
-        <Pressable accessibilityRole="button" accessibilityLabel="إعدادات التنبيه" onPress={() => router.push("/(tabs)/profile")} style={({ pressed }) => [styles.heroBell, pressed && styles.iconPressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("calendar.reminderSettings")} onPress={() => router.push("/(tabs)/profile")} style={({ pressed }) => [styles.heroBell, pressed && styles.iconPressed]}>
           <MaterialIcons name="notifications-none" size={25} color={COLORS.forest} />
           {reminderEnabled && <View style={styles.notificationDot} />}
         </Pressable>
       </View>
       <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>التقويم</Text>
-        <Text style={styles.heroSubtitle}>خطتك اليومية، خطوة بخطوة نحو هدفك</Text>
+        <Text style={styles.heroTitle}>{t("calendar.title")}</Text>
+        <Text style={styles.heroSubtitle}>{t("calendar.subtitle")}</Text>
       </View>
     </Animated.View>
   );
@@ -142,16 +145,17 @@ function CalendarSurface({
   monthLabel: string;
   completedDays: number;
 }) {
+  const { language, t } = useLanguage();
   const currentDay = days.find((day) => getDayState(day) === "current")?.dayNumber;
   const rows = chunk(days, 7);
-  const weekdayNames = ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+  const weekdayNames = language === "ar" ? ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"] : ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
   return (
     <View style={styles.calendarSurface}>
       <View style={styles.calendarControls}>
         <View style={styles.controlGroup}><View style={styles.controlIconMuted}><MaterialIcons name="format-list-bulleted" size={24} color={COLORS.forestMuted} /></View><View style={styles.controlIconActive}><MaterialIcons name="calendar-month" size={24} color={COLORS.forest} /></View></View>
         <View style={styles.monthLabel}><MaterialIcons name="chevron-right" size={27} color={COLORS.forest} /><Text style={styles.monthText}>{monthLabel}</Text><MaterialIcons name="chevron-left" size={27} color={COLORS.forest} /></View>
-        <View style={styles.filterControl}><MaterialIcons name="filter-list" size={22} color={COLORS.forestMuted} /><Text style={styles.filterText}>مسار التعلّم</Text></View>
+        <View style={styles.filterControl}><MaterialIcons name="filter-list" size={22} color={COLORS.forestMuted} /><Text style={styles.filterText}>{t("calendar.learningPath")}</Text></View>
       </View>
       <View style={styles.calendarDivider} />
       <View style={styles.weekdayRow}>{weekdayNames.map((name) => <Text key={name} style={styles.weekday}>{name}</Text>)}</View>
@@ -164,35 +168,36 @@ function CalendarSurface({
         ))}
       </View>
       <View style={styles.legendRow}>
-        <LegendItem icon="lock-outline" label="مقفل" />
+        <LegendItem icon="lock-outline" label={t("calendar.locked")} />
         <View style={styles.legendDivider} />
-        <LegendItem icon="check-circle" label="مكتمل" color="#638161" />
+        <LegendItem icon="check-circle" label={t("calendar.completed")} color="#638161" />
         <View style={styles.legendDivider} />
-        <LegendItem icon="circle" label={currentDay ? `مهمة اليوم ${currentDay}` : "مهمة اليوم"} color={COLORS.forest} />
+        <LegendItem icon="circle" label={currentDay ? `${t("calendar.todayTask")} ${currentDay}` : t("calendar.todayTask")} color={COLORS.forest} />
       </View>
-      <Text style={styles.journeyHint}>أكملت {completedDays} يومًا. تُفتح الخطوة التالية بعد اجتياز اختبارك.</Text>
+      <Text style={styles.journeyHint}>{t("calendar.completedDays", { count: completedDays })}</Text>
     </View>
   );
 }
 
 function CalendarDayCard({ day }: { day: CalendarDay }) {
+  const { language, t } = useLanguage();
   const state = getDayState(day);
   const currentTask = day.tasks.find((task) => task.status === "unlocked" || task.status === "in_quiz");
   const card = (
     <View style={[styles.dayCard, state === "completed" && styles.dayCardCompleted, state === "current" && styles.dayCardCurrent]}>
-      {state === "current" && <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>اليوم</Text></View>}
+      {state === "current" && <View style={styles.todayBadge}><Text style={styles.todayBadgeText}>{t("calendar.today")}</Text></View>}
       <Text style={[styles.gridDayNumber, state === "locked" && styles.gridDayMuted]}>{day.dayNumber}</Text>
       {state === "completed" ? (
-        <><MaterialIcons name="check-circle" size={19} color="#638161" /><Text style={styles.dayStatusComplete}>مكتمل</Text></>
+        <><MaterialIcons name="check-circle" size={19} color="#638161" /><Text style={styles.dayStatusComplete}>{t("calendar.completed")}</Text></>
       ) : state === "current" ? (
-        <><MaterialIcons name={currentTask?.status === "in_quiz" ? "fact-check" : "description"} size={20} color={COLORS.forest} /><Text style={styles.dayStatusCurrent}>مهمة اليوم</Text><Text style={styles.dayDuration}>{formatDuration(currentTask?.estimatedMinutes ?? 0)}</Text></>
+        <><MaterialIcons name={currentTask?.status === "in_quiz" ? "fact-check" : "description"} size={20} color={COLORS.forest} /><Text style={styles.dayStatusCurrent}>{t("calendar.todayTask")}</Text><Text style={styles.dayDuration}>{formatDuration(currentTask?.estimatedMinutes ?? 0, language)}</Text></>
       ) : (
-        <><MaterialIcons name="lock-outline" size={19} color="#888D80" /><Text style={styles.dayStatusLocked}>مقفل</Text></>
+        <><MaterialIcons name="lock-outline" size={19} color="#888D80" /><Text style={styles.dayStatusLocked}>{t("calendar.locked")}</Text></>
       )}
     </View>
   );
   if (!currentTask) return card;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`فتح مهمة اليوم ${day.dayNumber}`} onPress={() => router.push({ pathname: "/quiz/[taskId]", params: { taskId: String(currentTask.id) } })} style={({ pressed }) => [styles.dayPressable, pressed && styles.pressed]}>{card}</Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={t("calendar.openTodayTask", { day: day.dayNumber })} onPress={() => router.push({ pathname: "/quiz/[taskId]", params: { taskId: String(currentTask.id) } })} style={({ pressed }) => [styles.dayPressable, pressed && styles.pressed]}>{card}</Pressable>;
 }
 
 function CurrentTaskCard({
@@ -204,6 +209,7 @@ function CurrentTaskCard({
   completedDays: number;
   totalDays: number;
 }) {
+  const { language, t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -215,13 +221,13 @@ function CurrentTaskCard({
       <Image source={{ uri: TASK_ILLUSTRATION }} style={styles.taskIllustration} resizeMode="cover" />
       <View style={styles.taskTop}>
         <View style={styles.taskCopyBlock}>
-          <Text style={styles.taskEyebrow}>مهمة اليوم <Text style={styles.taskLeaf}>⌁</Text></Text>
+          <Text style={styles.taskEyebrow}>{t("calendar.todayTask")} <Text style={styles.taskLeaf}>⌁</Text></Text>
           <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-          <View style={styles.taskMeta}><View style={styles.categoryChip}><Text style={styles.categoryText}>{task.status === "in_quiz" ? "اختبار مستمر" : "مفاهيم"}</Text></View><View style={styles.metaInfo}><MaterialIcons name="schedule" size={20} color={COLORS.forestMuted} /><Text style={styles.metaText}>{formatDuration(task.estimatedMinutes ?? 0)}</Text></View></View>
+          <View style={styles.taskMeta}><View style={styles.categoryChip}><Text style={styles.categoryText}>{task.status === "in_quiz" ? t("home.quizActive") : t("calendar.concepts")}</Text></View><View style={styles.metaInfo}><MaterialIcons name="schedule" size={20} color={COLORS.forestMuted} /><Text style={styles.metaText}>{formatDuration(task.estimatedMinutes ?? 0, language)}</Text></View></View>
         </View>
-        <View style={styles.progressCircle}><Text style={styles.progressValue}>{journeyPercent}%</Text><Text style={styles.progressLabel}>تقدّمك</Text></View>
+        <View style={styles.progressCircle}><Text style={styles.progressValue}>{journeyPercent}%</Text><Text style={styles.progressLabel}>{t("calendar.yourProgress")}</Text></View>
       </View>
-      <CalendarAction label={task.status === "in_quiz" ? "تابع الاختبار" : "ابدأ المهمة والاختبار"} icon="play-circle-filled" onPress={() => router.push({ pathname: "/quiz/[taskId]", params: { taskId: String(task.id) } })} />
+      <CalendarAction label={task.status === "in_quiz" ? t("calendar.continueQuiz") : t("calendar.startTask")} icon="play-circle-filled" onPress={() => router.push({ pathname: "/quiz/[taskId]", params: { taskId: String(task.id) } })} />
     </Animated.View>
   );
 }
@@ -242,11 +248,12 @@ function CalendarEntry({ title, copy, label, icon, onPress, error = false }: { t
 }
 
 function CalendarLoading() {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
       <View style={styles.entryIcon}><MaterialIcons name="calendar-month" size={34} color={COLORS.forest} /></View>
       <ActivityIndicator color={COLORS.forest} size="small" />
-      <Text style={styles.loadingText}>نرتّب أيام رحلتك بهدوء…</Text>
+      <Text style={styles.loadingText}>{t("calendar.loading")}</Text>
     </ScreenContainer>
   );
 }
@@ -290,17 +297,17 @@ function chunk<T>(items: T[], size: number) {
   return rows;
 }
 
-function formatPlanMonth(date: Date | string) {
+function formatPlanMonth(date: Date | string, language: "ar" | "en") {
   const parsed = date instanceof Date ? date : new Date(date);
-  return new Intl.DateTimeFormat("ar", { month: "long", year: "numeric" }).format(parsed);
+  return new Intl.DateTimeFormat(language, { month: "long", year: "numeric" }).format(parsed);
 }
 
-function formatDuration(minutes: number) {
+function formatDuration(minutes: number, language: "ar" | "en") {
   if (minutes <= 0) return "—";
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  if (!hours) return `${minutes} د`;
-  return remainder ? `${hours} س ${remainder} د` : `${hours} س`;
+  if (!hours) return language === "ar" ? `${minutes} د` : `${minutes}m`;
+  return remainder ? (language === "ar" ? `${hours} س ${remainder} د` : `${hours}h ${remainder}m`) : (language === "ar" ? `${hours} س` : `${hours}h`);
 }
 
 const styles = StyleSheet.create({

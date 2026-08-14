@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import { useLanguage } from "@/lib/i18n";
 
 const COLORS = {
   ivory: "#FDF9F4",
@@ -25,11 +26,13 @@ const STEP_ART: Record<number, string> = {
 };
 
 export function GoalJourneyHeader({ step, onBack }: { step: number; onBack?: () => void }) {
-  return <View style={styles.header}><View style={styles.headerRow}>{step > 1 ? <Pressable accessibilityRole="button" accessibilityLabel="العودة إلى الخطوة السابقة" onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}><MaterialIcons name="arrow-forward" size={22} color={COLORS.forest} /></Pressable> : <View style={styles.backSpacer} />}<View style={styles.brand}><Image source={require("@/assets/images/icon.png")} style={styles.logoImage} /><Text style={styles.brandText}>Echo</Text></View><View style={styles.backSpacer} /></View><ProgressDots currentStep={step} /></View>;
+  const { t } = useLanguage();
+  return <View style={styles.header}><View style={styles.headerRow}>{step > 1 ? <Pressable accessibilityRole="button" accessibilityLabel={t("onboarding.back")} onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}><MaterialIcons name="arrow-forward" size={22} color={COLORS.forest} /></Pressable> : <View style={styles.backSpacer} />}<View style={styles.brand}><Image source={require("@/assets/images/icon.png")} style={styles.logoImage} /><Text style={styles.brandText}>Echo</Text></View><View style={styles.backSpacer} /></View><ProgressDots currentStep={step} /></View>;
 }
 
 function ProgressDots({ currentStep }: { currentStep: number }) {
-  return <View style={styles.progress} accessibilityLabel={`الخطوة ${currentStep} من 4`} accessibilityRole="progressbar"><View style={styles.progressLine} />{[1, 2, 3, 4].map((number) => { const completed = number < currentStep; const active = number === currentStep; return <View key={number} style={[styles.progressDot, (completed || active) && styles.progressDotActive]}><Text style={[styles.progressText, (completed || active) && styles.progressTextActive]}>{completed ? "✓" : number}</Text></View>; })}</View>;
+  const { t } = useLanguage();
+  return <View style={styles.progress} accessibilityLabel={t("onboarding.stepProgress", { current: currentStep, total: 4 })} accessibilityRole="progressbar"><View style={styles.progressLine} />{[1, 2, 3, 4].map((number) => { const completed = number < currentStep; const active = number === currentStep; return <View key={number} style={[styles.progressDot, (completed || active) && styles.progressDotActive]}><Text style={[styles.progressText, (completed || active) && styles.progressTextActive]}>{completed ? "✓" : number}</Text></View>; })}</View>;
 }
 
 export function StepMotion({ step, children }: { step: number; children: ReactNode }) {
@@ -70,7 +73,8 @@ export function ValueEditor({ label, suffix, value, onChangeText, error }: { lab
 }
 
 export function ReviewCard({ title, level, minutes, days }: { title: string; level: string; minutes: number; days: number }) {
-  const rows = [{ label: "الهدف", value: title, icon: "track-changes" as IconName }, { label: "المستوى", value: level, icon: "school" as IconName }, { label: "يوميًا", value: `${minutes} دقيقة`, icon: "schedule" as IconName }, { label: "المدة", value: `${days} يوم`, icon: "calendar-month" as IconName }];
+  const { t } = useLanguage();
+  const rows = [{ label: t("onboarding.reviewGoal"), value: title, icon: "track-changes" as IconName }, { label: t("onboarding.reviewLevel"), value: level, icon: "school" as IconName }, { label: t("onboarding.reviewDaily"), value: t("common.minutes", { count: minutes }), icon: "schedule" as IconName }, { label: t("onboarding.reviewDuration"), value: t("common.days", { count: days }), icon: "calendar-month" as IconName }];
   return <View style={styles.reviewCard}>{rows.map((row) => <View key={row.label} style={styles.reviewRow}><View style={styles.reviewIcon}><MaterialIcons name={row.icon} size={19} color={COLORS.forest} /></View><View style={styles.reviewCopy}><Text style={styles.reviewLabel}>{row.label}</Text><Text style={styles.reviewValue} numberOfLines={2}>{row.value}</Text></View></View>)}</View>;
 }
 

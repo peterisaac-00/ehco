@@ -21,6 +21,7 @@ import {
   isDailyReminderEnabled,
   syncDailyReminderTask,
 } from "@/lib/daily-reminder";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 import Svg, { Circle, Path } from "react-native-svg";
 
@@ -46,9 +47,11 @@ type IconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export default function ProfileScreen() {
   const { user, loading, isAuthenticated, logout } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const navigation = useNavigation();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderLoading, setReminderLoading] = useState(false);
+  const [languageLoading, setLanguageLoading] = useState(false);
   const currentTask = trpc.tasks.current.useQuery(undefined, { enabled: isAuthenticated });
   const activeGoal = trpc.goals.active.useQuery(undefined, { enabled: isAuthenticated });
   const calendar = trpc.calendar.get.useQuery(undefined, { enabled: isAuthenticated });
@@ -79,9 +82,21 @@ export default function ProfileScreen() {
       }
       const result = await enableDailyReminder(currentTask.data?.task.title);
       if (result === "enabled") setReminderEnabled(true);
-      else Alert.alert(result === "unsupported" ? "غير متاح على الويب" : "إذن الإشعارات مطلوب", "يمكنك تفعيل التذكير من تطبيق الهاتف بعد منح الإذن.");
+      else Alert.alert(result === "unsupported" ? t("profile.webNotificationUnsupported") : t("profile.notificationPermission"), t("profile.notificationPermissionCopy"));
     } finally {
       setReminderLoading(false);
+    }
+  };
+
+  const toggleLanguage = async () => {
+    if (languageLoading) return;
+    setLanguageLoading(true);
+    try {
+      await setLanguage(language === "ar" ? "en" : "ar");
+    } catch (error) {
+      Alert.alert(t("profile.language"), error instanceof Error ? error.message : t("common.retry"));
+    } finally {
+      setLanguageLoading(false);
     }
   };
 
@@ -96,8 +111,8 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <ProfileHero reminderEnabled={reminderEnabled} />
         <ProfileIdentityCard
-          name={user?.name ?? "ضيف"}
-          email={user?.email ?? "سجّل الدخول لحفظ تقدمك"}
+          name={user?.name ?? t("profile.guest")}
+          email={user?.email ?? t("profile.guestEmail")}
           isAuthenticated={isAuthenticated}
           goalTitle={activeGoal.data?.title}
           progress={progress}
@@ -109,9 +124,12 @@ export default function ProfileScreen() {
           reminderEnabled={reminderEnabled}
           reminderLoading={reminderLoading}
           onToggleReminder={() => void toggleReminder()}
+          language={language}
+          languageLoading={languageLoading}
+          onToggleLanguage={() => void toggleLanguage()}
         />
         {isAuthenticated && <LogoutButton onPress={() => void logout()} />}
-        {!isAuthenticated && <ProfileAction label="تسجيل الدخول" icon="login" onPress={() => router.push("/login")} />}
+        {!isAuthenticated && <ProfileAction label={t("profile.login")} icon="login" onPress={() => router.push("/login")} />}
         <MotivationCard />
       </ScrollView>
     </ScreenContainer>
@@ -119,6 +137,7 @@ export default function ProfileScreen() {
 }
 
 function ProfileHero({ reminderEnabled }: { reminderEnabled: boolean }) {
+  const { t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -132,8 +151,8 @@ function ProfileHero({ reminderEnabled }: { reminderEnabled: boolean }) {
         <View style={styles.heroBell}><MaterialIcons name="notifications-none" size={25} color={COLORS.forest} />{reminderEnabled && <View style={styles.notificationDot} />}</View>
       </View>
       <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>الحساب</Text>
-        <Text style={styles.heroSubtitle}>إدارة ملفك الشخصي وإعداداتك</Text>
+        <Text style={styles.heroTitle}>{t("profile.title")}</Text>
+        <Text style={styles.heroSubtitle}>{t("profile.subtitle")}</Text>
       </View>
     </Animated.View>
   );
@@ -167,21 +186,22 @@ function ProfileIdentityCard({
   progress: number | null;
   dailyMinutes?: number;
 }) {
+  const { language, t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 340, useNativeDriver: true }).start();
   }, [entrance]);
   const stats = [
-    ...(progress === null ? [] : [{ icon: "trending-up" as IconName, label: "التقدّم العام", value: `${progress}%` }]),
-    ...(goalTitle ? [{ icon: "track-changes" as IconName, label: "الهدف الحالي", value: goalTitle }] : []),
-    ...(dailyMinutes ? [{ icon: "schedule" as IconName, label: "الوقت اليومي", value: formatStudyTime(dailyMinutes) }] : []),
+    ...(progress === null ? [] : [{ icon: "trending-up" as IconName, label: t("profile.overallProgress"), value: `${progress}%` }]),
+    ...(goalTitle ? [{ icon: "track-changes" as IconName, label: t("profile.currentGoal"), value: goalTitle }] : []),
+    ...(dailyMinutes ? [{ icon: "schedule" as IconName, label: t("profile.dailyTime"), value: formatStudyTime(dailyMinutes, language) }] : []),
   ].slice(0, 3);
 
   return (
     <Animated.View style={[styles.identityCard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
       <View style={styles.identityRow}>
         <Image source={{ uri: AVATAR_ILLUSTRATION }} style={styles.avatar} />
-        <View style={styles.identityCopy}><Text numberOfLines={1} style={styles.userName}>{name} <Text style={styles.nameLeaf}>⌁</Text></Text><Text numberOfLines={1} style={styles.userEmail}>{email}</Text><View style={styles.statusPill}><MaterialIcons name="check-circle" size={15} color="#547853" /><Text style={styles.statusText}>{isAuthenticated ? "مستمر في رحلتي" : "مرحبًا بك"}</Text></View></View>
+        <View style={styles.identityCopy}><Text numberOfLines={1} style={styles.userName}>{name} <Text style={styles.nameLeaf}>⌁</Text></Text><Text numberOfLines={1} style={styles.userEmail}>{email}</Text><View style={styles.statusPill}><MaterialIcons name="check-circle" size={15} color="#547853" /><Text style={styles.statusText}>{isAuthenticated ? t("profile.activeStatus") : t("profile.welcomeStatus")}</Text></View></View>
       </View>
       {stats.length > 0 && <><View style={styles.identityDivider} /><View style={styles.profileStats}>{stats.map((stat, index) => <ProfileStat key={stat.label} {...stat} bordered={index !== stats.length - 1} />)}</View></>}
     </Animated.View>
@@ -198,22 +218,30 @@ function LearningSettingsCard({
   reminderEnabled,
   reminderLoading,
   onToggleReminder,
+  language,
+  languageLoading,
+  onToggleLanguage,
 }: {
   dailyMinutes?: number;
   currentLevel?: "beginner" | "intermediate" | "advanced";
   reminderEnabled: boolean;
   reminderLoading: boolean;
   onToggleReminder: () => void;
+  language: "ar" | "en";
+  languageLoading: boolean;
+  onToggleLanguage: () => void;
 }) {
+  const { t } = useLanguage();
   const rows = [
-    ...(dailyMinutes ? [{ icon: "schedule" as IconName, title: "الوقت المتاح يوميًا", value: formatStudyTime(dailyMinutes) }] : []),
-    ...(currentLevel ? [{ icon: "speed" as IconName, title: "مستوى الخبرة", value: levelLabel(currentLevel) }] : []),
+    ...(dailyMinutes ? [{ icon: "schedule" as IconName, title: t("profile.availableTime"), value: formatStudyTime(dailyMinutes, language) }] : []),
+    ...(currentLevel ? [{ icon: "speed" as IconName, title: t("profile.experienceLevel"), value: levelLabel(currentLevel, t) }] : []),
   ];
   return (
     <View style={styles.sectionWrap}>
-      <SectionHeading label="إعدادات التعلّم" icon="menu-book" />
+      <SectionHeading label={t("profile.learningSettings")} icon="menu-book" />
       <View style={styles.settingsCard}>
         {rows.map((row, index) => <LearningSettingRow key={row.title} {...row} divided={index !== rows.length - 1 || true} />)}
+        <LanguageRow language={language} loading={languageLoading} onPress={onToggleLanguage} />
         <ReminderRow enabled={reminderEnabled} loading={reminderLoading} onPress={onToggleReminder} />
       </View>
     </View>
@@ -224,11 +252,17 @@ function LearningSettingRow({ icon, title, value, divided }: { icon: IconName; t
   return <View style={[styles.settingRow, divided && styles.settingRowDivided]}><View style={styles.settingIcon}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>{title}</Text><Text style={styles.settingValue}>{value}</Text></View></View>;
 }
 
+function LanguageRow({ language, loading, onPress }: { language: "ar" | "en"; loading: boolean; onPress: () => void }) {
+  const { t } = useLanguage();
+  return <Pressable accessibilityRole="button" accessibilityState={{ busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, styles.settingRowDivided, pressed && !loading && styles.pressed]}><View style={styles.settingIcon}><MaterialIcons name="translate" size={22} color={COLORS.forestMuted} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>{t("profile.language")}</Text><Text style={styles.settingValue}>{t("profile.languageDescription")}</Text></View>{loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={styles.languageValue}><Text style={styles.languageValueText}>{language === "ar" ? t("profile.languageArabic") : t("profile.languageEnglish")}</Text><MaterialIcons name="swap-horiz" size={18} color={COLORS.forest} /></View>}</Pressable>;
+}
+
 function ReminderRow({ enabled, loading, onPress }: { enabled: boolean; loading: boolean; onPress: () => void }) {
+  const { t } = useLanguage();
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: enabled, busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && !loading && styles.pressed]}>
       <View style={styles.settingIcon}><MaterialIcons name="notifications" size={22} color={COLORS.forestMuted} /></View>
-      <View style={styles.settingCopy}><Text style={styles.settingTitle}>التنبيه اليومي</Text><Text style={styles.settingValue}>{enabled ? "إيقاف التنبيه اليومي" : "تفعيل التنبيه اليومي"}</Text></View>
+      <View style={styles.settingCopy}><Text style={styles.settingTitle}>{t("profile.reminder")}</Text><Text style={styles.settingValue}>{enabled ? t("profile.reminderOn") : t("profile.reminderOff")}</Text></View>
       {loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={[styles.toggle, enabled && styles.toggleEnabled]}><View style={[styles.toggleKnob, enabled && styles.toggleKnobEnabled]} /></View>}
     </Pressable>
   );
@@ -239,11 +273,13 @@ function SectionHeading({ label, icon }: { label: string; icon: IconName }) {
 }
 
 function LogoutButton({ onPress }: { onPress: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color={COLORS.danger} /><Text style={styles.logoutText}>تسجيل الخروج</Text></Pressable>;
+  const { t } = useLanguage();
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color={COLORS.danger} /><Text style={styles.logoutText}>{t("profile.logout")}</Text></Pressable>;
 }
 
 function MotivationCard() {
-  return <View style={styles.motivationCard}><Image source={{ uri: MOTIVATION_ILLUSTRATION }} style={styles.motivationIllustration} resizeMode="cover" /><View style={styles.motivationCopy}><Text style={styles.motivationTitle}>استمر في رحلتك</Text><Text style={styles.motivationText}>كل يوم تقدّمك خطوة أقرب نحو هدفك.</Text></View></View>;
+  const { t } = useLanguage();
+  return <View style={styles.motivationCard}><Image source={{ uri: MOTIVATION_ILLUSTRATION }} style={styles.motivationIllustration} resizeMode="cover" /><View style={styles.motivationCopy}><Text style={styles.motivationTitle}>{t("profile.motivationTitle")}</Text><Text style={styles.motivationText}>{t("profile.motivationCopy")}</Text></View></View>;
 }
 
 function ProfileAction({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
@@ -251,18 +287,19 @@ function ProfileAction({ label, icon, onPress }: { label: string; icon: IconName
 }
 
 function ProfileLoading() {
-  return <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6"><View style={styles.loadingIcon}><MaterialIcons name="spa" size={34} color={COLORS.forest} /></View><ActivityIndicator color={COLORS.forest} size="small" /><Text style={styles.loadingText}>نجهّز مساحتك بهدوء…</Text></ScreenContainer>;
+  const { t } = useLanguage();
+  return <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6"><View style={styles.loadingIcon}><MaterialIcons name="spa" size={34} color={COLORS.forest} /></View><ActivityIndicator color={COLORS.forest} size="small" /><Text style={styles.loadingText}>{t("profile.loading")}</Text></ScreenContainer>;
 }
 
-function formatStudyTime(minutes: number) {
+function formatStudyTime(minutes: number, language: "ar" | "en") {
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  if (!hours) return `${minutes} د`;
-  return remainder ? `${hours} س ${remainder} د` : `${hours} س`;
+  if (!hours) return language === "ar" ? `${minutes} د` : `${minutes}m`;
+  return remainder ? (language === "ar" ? `${hours} س ${remainder} د` : `${hours}h ${remainder}m`) : (language === "ar" ? `${hours} س` : `${hours}h`);
 }
 
-function levelLabel(level: "beginner" | "intermediate" | "advanced") {
-  return level === "beginner" ? "مبتدئ" : level === "intermediate" ? "متوسط" : "متقدم";
+function levelLabel(level: "beginner" | "intermediate" | "advanced", t: (key: string) => string) {
+  return t(`common.level.${level}`);
 }
 
 const styles = StyleSheet.create({
@@ -308,6 +345,8 @@ const styles = StyleSheet.create({
   toggleEnabled: { backgroundColor: COLORS.forest },
   toggleKnob: { width: 23, height: 23, borderRadius: 12, backgroundColor: COLORS.card, alignSelf: "flex-start" },
   toggleKnobEnabled: { alignSelf: "flex-end" },
+  languageValue: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 12, backgroundColor: "#E8F0E3", paddingHorizontal: 8, paddingVertical: 6 },
+  languageValueText: { color: COLORS.forest, fontSize: 12, fontWeight: "800" },
 
   logoutButton: { minHeight: 55, marginHorizontal: 18, borderRadius: 17, borderWidth: 1, borderColor: "#F2D7CF", backgroundColor: COLORS.dangerSurface, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 9 },
   logoutText: { color: COLORS.danger, fontSize: 15, fontWeight: "800" },

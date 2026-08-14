@@ -15,6 +15,8 @@ export const LEARNING_LIMITS = {
 } as const;
 
 export const currentLevelSchema = z.enum(["beginner", "intermediate", "advanced"]);
+export const contentLanguageSchema = z.enum(["ar", "en"]);
+export type ContentLanguage = z.infer<typeof contentLanguageSchema>;
 
 export const createGoalInputSchema = z.object({
   title: z.string().trim().min(3, "اكتب هدفًا من 3 أحرف على الأقل.").max(160),

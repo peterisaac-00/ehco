@@ -1,5 +1,6 @@
 import Svg, { Circle } from "react-native-svg";
 import { Image, StyleSheet, Text, View } from "react-native";
+import { useLanguage } from "@/lib/i18n";
 
 const QUIZ_SCENE_URL = "/manus-storage/ehco-quiz-learning-scene_45df277b.png";
 
@@ -26,6 +27,7 @@ export function QuizLifestyleScene({ compact = false }: { compact?: boolean }) {
 
 /** A server-score-only visual ring. It does not calculate grading or reveal answer keys. */
 export function QuizScoreRing({ score }: { score: number }) {
+  const { t } = useLanguage();
   const size = 132;
   const stroke = 10;
   const radius = (size - stroke) / 2;
@@ -34,7 +36,7 @@ export function QuizScoreRing({ score }: { score: number }) {
   const dashOffset = circumference * (1 - safeScore / 100);
 
   return (
-    <View style={styles.scoreRing} accessibilityLabel={`نتيجة الاختبار ${safeScore}%`}>
+    <View style={styles.scoreRing} accessibilityLabel={t("quiz.scoreAccessibility", { score: safeScore })}>
       <Svg width={size} height={size} style={styles.scoreSvg}>
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={COLORS.border} strokeWidth={stroke} fill="none" />
         <Circle
@@ -53,7 +55,7 @@ export function QuizScoreRing({ score }: { score: number }) {
       </Svg>
       <View style={styles.scoreCenter}>
         <Text style={styles.scoreValue}>{safeScore}%</Text>
-        <Text style={styles.scoreCaption}>نتيجة الاختبار</Text>
+        <Text style={styles.scoreCaption}>{t("quiz.scoreLabel")}</Text>
       </View>
     </View>
   );

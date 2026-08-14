@@ -5,6 +5,7 @@ const goal = {
   currentLevel: "beginner" as const,
   dailyMinutes: 30,
   targetDurationDays: 7,
+  language: "ar" as const,
 };
 
 async function main() {

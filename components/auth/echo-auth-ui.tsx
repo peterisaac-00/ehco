@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { type ComponentProps, useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { useLanguage } from "@/lib/i18n";
 
 const COLORS = {
   ivory: "#FDF9F4",
@@ -22,6 +23,7 @@ const DESK = "/manus-storage/ehco-auth-desk_d80d586e.png";
 type IconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export function AuthHero({ mode }: { mode: "login" | "register" }) {
+  const { t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -32,7 +34,7 @@ export function AuthHero({ mode }: { mode: "login" | "register" }) {
       <Image source={{ uri: LANDSCAPE }} style={styles.landscape} resizeMode="cover" />
       <AuthLandscapeFallback />
       <View style={styles.brandMark}><View style={styles.brandIcon}><MaterialIcons name="spa" size={30} color={COLORS.forest} /></View><Text style={styles.brandText}>Echo</Text></View>
-      <View style={styles.heroCopy}><Text style={styles.heroTitle}>{isLogin ? "مرحبًا بعودتك" : "أنشئ حسابًا جديدًا"}</Text><Text style={styles.heroSubtitle}>{isLogin ? "سجّل دخولك لمتابعة رحلتك" : "ابدأ رحلتك خطوة بخطوة نحو هدفك"}</Text></View>
+      <View style={styles.heroCopy}><Text style={styles.heroTitle}>{isLogin ? t("auth.welcomeBack") : t("auth.createAccount")}</Text><Text style={styles.heroSubtitle}>{isLogin ? t("auth.loginJourney") : t("auth.createJourney")}</Text></View>
     </Animated.View>
   );
 }
@@ -69,7 +71,8 @@ export function AuthField({ icon, label, help, error, ...inputProps }: TextInput
 }
 
 export function PasswordRule() {
-  return <View style={styles.passwordRule}><MaterialIcons name="check-circle" size={16} color="#5D835A" /><Text style={styles.passwordRuleText}>ثمانية أحرف على الأقل</Text></View>;
+  const { t } = useLanguage();
+  return <View style={styles.passwordRule}><MaterialIcons name="check-circle" size={16} color="#5D835A" /><Text style={styles.passwordRuleText}>{t("auth.passwordRule")}</Text></View>;
 }
 
 export function AuthErrorMessage({ message }: { message: string }) {
@@ -81,8 +84,9 @@ export function AuthSubmitButton({ label, loading, disabled, onPress }: { label:
 }
 
 export function AuthSwitch({ mode, onPress }: { mode: "login" | "register"; onPress: () => void }) {
+  const { t } = useLanguage();
   const isLogin = mode === "login";
-  return <View style={styles.switchRow}><Text style={styles.switchCopy}>{isLogin ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}</Text><Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && styles.linkPressed}><Text style={styles.switchAction}>{isLogin ? "إنشاء حساب جديد" : "تسجيل الدخول"}</Text></Pressable></View>;
+  return <View style={styles.switchRow}><Text style={styles.switchCopy}>{isLogin ? t("auth.noAccount") : t("auth.haveAccount")}</Text><Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && styles.linkPressed}><Text style={styles.switchAction}>{isLogin ? t("auth.createNew") : t("auth.login")}</Text></Pressable></View>;
 }
 
 export function LifestyleDecoration() {

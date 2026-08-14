@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, 
 
 import { ScreenContainer } from "@/components/screen-container";
 import { QuizLifestyleScene, QuizScoreRing } from "@/components/quiz/quiz-visuals";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 type QuizOutcome = {
@@ -33,6 +34,7 @@ const COLORS = {
 } as const;
 
 export default function QuizScreen() {
+  const { t } = useLanguage();
   const params = useLocalSearchParams<{ taskId: string }>();
   const taskId = Number(params.taskId);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -40,21 +42,21 @@ export default function QuizScreen() {
   const entrance = useRef(new Animated.Value(0)).current;
   const progressAnimation = useRef(new Animated.Value(0)).current;
   const utils = trpc.useUtils();
-  const beginQuiz = trpc.tasks.beginQuiz.useMutation({ onError: (error) => Alert.alert("تعذر فتح الاختبار", error.message) });
+  const beginQuiz = trpc.tasks.beginQuiz.useMutation({ onError: (error) => Alert.alert(t("quiz.openError"), error.message) });
   const submitQuiz = trpc.tasks.submitQuiz.useMutation({
     onSuccess: async (result) => {
       await Promise.all([utils.tasks.current.invalidate(), utils.calendar.get.invalidate()]);
       setOutcome(result);
     },
-    onError: (error) => Alert.alert("تعذر تصحيح الاختبار", error.message),
+    onError: (error) => Alert.alert(t("quiz.gradeError"), error.message),
   });
   const retrySegment = trpc.plans.retrySegment.useMutation({
     onSuccess: async () => {
       await Promise.all([utils.tasks.current.invalidate(), utils.calendar.get.invalidate()]);
-      Alert.alert("تم تجهيز الدفعة التالية", "يمكنك الآن متابعة المهمة التالية.");
+      Alert.alert(t("quiz.segmentReady"), t("quiz.segmentReadyCopy"));
       router.replace("/");
     },
-    onError: (error) => Alert.alert("تعذر تجهيز الدفعة التالية", error.message),
+    onError: (error) => Alert.alert(t("quiz.segmentError"), error.message),
   });
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function QuizScreen() {
       <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
         <View style={styles.centerContainer}>
           <ActivityIndicator color={COLORS.forest} size="large" />
-          <Text style={styles.loadingText}>جاري تحضير أسئلة الاختبار...</Text>
+          <Text style={styles.loadingText}>{t("quiz.loading")}</Text>
         </View>
       </ScreenContainer>
     );
@@ -116,16 +118,16 @@ export default function QuizScreen() {
           <Animated.View style={[styles.header, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
             <QuizLifestyleScene compact />
             <View style={styles.eyebrowRow}>
-              <Text style={styles.eyebrow}>اختبار قصير</Text>
-              <View style={styles.badgeWrap}><Text style={styles.badgeText}>{questions.length} أسئلة</Text></View>
+              <Text style={styles.eyebrow}>{t("quiz.title")}</Text>
+              <View style={styles.badgeWrap}><Text style={styles.badgeText}>{t("quiz.questionCount", { count: questions.length })}</Text></View>
             </View>
             <Text style={styles.title}>{beginQuiz.data.task.title}</Text>
-            <Text style={styles.instruction}>أجب عن الأسئلة لتثبت فهمك وتفتح خطوتك التالية.</Text>
+            <Text style={styles.instruction}>{t("quiz.instruction")}</Text>
             
             {/* Progress indicator */}
             <View style={styles.progressWrap}>
               <View style={styles.progressMeta}>
-                <Text style={styles.progressLabel}>التقدم</Text>
+                <Text style={styles.progressLabel}>{t("quiz.progress")}</Text>
                 <Text style={styles.progressCount}>{answeredCount} / {questions.length}</Text>
               </View>
               <View style={styles.progressBarTrack}>
@@ -151,7 +153,7 @@ export default function QuizScreen() {
                         key={option.id}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
-                        accessibilityLabel={`السؤال ${index + 1}: ${option.text}`}
+                        accessibilityLabel={t("quiz.questionAccessibility", { index: index + 1, text: option.text })}
                         onPress={() => setAnswers((current) => ({ ...current, [question.id]: option.id }))}
                         style={({ pressed }) => [styles.option, selected && styles.optionSelected, pressed && styles.optionPressed]}
                       >
@@ -173,7 +175,7 @@ export default function QuizScreen() {
           <View style={styles.counterRow}>
             <MaterialIcons name={completed ? "check-circle" : "radio-button-unchecked"} size={18} color={completed ? COLORS.success : COLORS.forestMuted} />
             <Text style={[styles.counter, completed && styles.counterComplete]}>
-              {completed ? "اكتملت كل الإجابات — جاهز للتحقق" : `تمت الإجابة على ${answeredCount} من ${questions.length}`}
+              {completed ? t("quiz.readyToVerify") : t("quiz.answerProgress", { answered: answeredCount, total: questions.length })}
             </Text>
           </View>
           <Pressable
@@ -186,12 +188,12 @@ export default function QuizScreen() {
             {submitQuiz.isPending ? (
               <View style={styles.submitRow}>
                 <ActivityIndicator color={COLORS.ivory} size="small" />
-                <Text style={styles.submitButtonText}>جاري التحقق...</Text>
+                <Text style={styles.submitButtonText}>{t("quiz.verifying")}</Text>
               </View>
             ) : (
               <View style={styles.submitRow}>
                 <MaterialIcons name="arrow-back" size={20} color={COLORS.ivory} />
-                <Text style={styles.submitButtonText}>{completed ? "تحقق من الإجابات" : "أكمل الإجابات للتحقق"}</Text>
+                <Text style={styles.submitButtonText}>{completed ? t("quiz.verify") : t("quiz.completeToVerify")}</Text>
               </View>
             )}
           </Pressable>
@@ -202,6 +204,7 @@ export default function QuizScreen() {
 }
 
 function QuizResult({ outcome, onRetry, onRetrySegment, retryingSegment }: { outcome: QuizOutcome; onRetry: () => void; onRetrySegment: () => void; retryingSegment: boolean }) {
+  const { t } = useLanguage();
   const success = outcome.passed;
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
@@ -211,43 +214,43 @@ function QuizResult({ outcome, onRetry, onRetrySegment, retryingSegment }: { out
           <View style={[styles.resultIconWrap, success ? styles.successIconWrap : styles.failIconWrap]}>
             <MaterialIcons name={success ? "verified" : "replay"} size={42} color={success ? COLORS.success : "#B45309"} />
           </View>
-          <Text style={styles.resultEyebrow}>{success ? "أحسنت!" : "تحتاج محاولة أخرى"}</Text>
+          <Text style={styles.resultEyebrow}>{success ? t("quiz.passedEyebrow") : t("quiz.failedEyebrow")}</Text>
           <QuizScoreRing score={outcome.score} />
-          <Text style={styles.resultTitle}>{success ? "نجحت في الاختبار بنجاح" : "لم تصل إلى نسبة النجاح المطلوبة"}</Text>
+          <Text style={styles.resultTitle}>{success ? t("quiz.passedTitle") : t("quiz.failedTitle")}</Text>
           <Text style={styles.resultCopy}>
             {success
               ? outcome.isPlanComplete
-                ? "أنهيت آخر مهمة في خطتك التعليمية. يمكنك مراجعة خطتك الكاملة الآن."
-                : "تم تسجيل النتيجة بنجاح وفتح خطوتك التالية في الرحلة."
-              : "راجع تفاصيل المهمة بعناية ثم أعد المحاولة لتجاوز اختبار الفهم."}
+                ? t("quiz.planComplete")
+                : t("quiz.passedCopy")
+              : t("quiz.failedCopy")}
           </Text>
 
           {success && outcome.nextSegmentPrepared && (
-            <View style={styles.noteBox}><MaterialIcons name="auto-awesome" size={16} color={COLORS.forest} /><Text style={styles.noteText}>تم تجهيز تفاصيل الدفعة التالية تلقائيًا.</Text></View>
+            <View style={styles.noteBox}><MaterialIcons name="auto-awesome" size={16} color={COLORS.forest} /><Text style={styles.noteText}>{t("quiz.segmentPrepared")}</Text></View>
           )}
           {success && outcome.nextSegmentFailed && (
-            <View style={[styles.noteBox, styles.failNoteBox]}><MaterialIcons name="error-outline" size={16} color="#B45309" /><Text style={[styles.noteText, styles.failNoteText]}>تم تسجيل نجاحك، لكن تعذر تجهيز الدفعة التالية مؤقتًا.</Text></View>
+            <View style={[styles.noteBox, styles.failNoteBox]}><MaterialIcons name="error-outline" size={16} color="#B45309" /><Text style={[styles.noteText, styles.failNoteText]}>{t("quiz.segmentPreparationFailed")}</Text></View>
           )}
 
           <View style={styles.resultActions}>
             {success && outcome.nextSegmentFailed && outcome.nextSegmentStartDay && (
               <Pressable accessibilityRole="button" onPress={onRetrySegment} disabled={retryingSegment} style={({ pressed }) => [styles.actionButton, styles.secondaryAction, pressed && styles.pressed]}>
-                {retryingSegment ? <ActivityIndicator color={COLORS.forest} /> : <Text style={styles.secondaryActionText}>إعادة تجهيز الدفعة التالية</Text>}
+                {retryingSegment ? <ActivityIndicator color={COLORS.forest} /> : <Text style={styles.secondaryActionText}>{t("quiz.retrySegment")}</Text>}
               </Pressable>
             )}
             {success ? (
               <Pressable accessibilityRole="button" onPress={() => router.replace(outcome.isPlanComplete ? "/(tabs)/plan" : "/")} style={({ pressed }) => [styles.actionButton, styles.primaryAction, pressed && styles.pressed]}>
                 <MaterialIcons name="arrow-back" size={18} color={COLORS.ivory} />
-                <Text style={styles.primaryActionText}>{outcome.isPlanComplete ? "العودة إلى الخطة" : "فتح مهمة اليوم"}</Text>
+                <Text style={styles.primaryActionText}>{outcome.isPlanComplete ? t("quiz.backToPlan") : t("plan.openTodayTask")}</Text>
               </Pressable>
             ) : (
               <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [styles.actionButton, styles.primaryAction, pressed && styles.pressed]}>
                 <MaterialIcons name="replay" size={18} color={COLORS.ivory} />
-                <Text style={styles.primaryActionText}>إعادة الاختبار</Text>
+                <Text style={styles.primaryActionText}>{t("quiz.retryQuiz")}</Text>
               </Pressable>
             )}
             <Pressable accessibilityRole="button" onPress={() => router.replace("/")} style={({ pressed }) => [styles.actionButton, styles.secondaryAction, pressed && styles.pressed]}>
-              <Text style={styles.secondaryActionText}>العودة إلى الرئيسية</Text>
+              <Text style={styles.secondaryActionText}>{t("quiz.backHome")}</Text>
             </Pressable>
           </View>
         </View>

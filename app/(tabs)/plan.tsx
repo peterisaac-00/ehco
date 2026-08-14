@@ -18,6 +18,7 @@ import {
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
 const COLORS = {
@@ -48,6 +49,7 @@ type JourneyState = "completed" | "current" | "locked";
 
 export default function PlanScreen() {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const navigation = useNavigation();
   const utils = trpc.useUtils();
   const activeGoal = trpc.goals.active.useQuery(undefined, { enabled: isAuthenticated });
@@ -80,7 +82,7 @@ export default function PlanScreen() {
 
   const generate = trpc.plans.generateInitial.useMutation({
     onSuccess: () => void plan.refetch(),
-    onError: (error) => Alert.alert("تعذر إنشاء الخطة", error.message),
+    onError: (error) => Alert.alert(t("plan.createError"), error.message),
   });
   const approve = trpc.plans.approve.useMutation({
     onSuccess: async () => {
@@ -91,27 +93,27 @@ export default function PlanScreen() {
       ]);
       router.replace("/");
     },
-    onError: (error) => Alert.alert("تعذر اعتماد الخطة", error.message),
+    onError: (error) => Alert.alert(t("plan.approveError"), error.message),
   });
   const editPlan = trpc.plans.edit.useMutation({
     onSuccess: (result) => {
       setEditRequest("");
       void plan.refetch();
-      Alert.alert(result.decision === "accepted" ? "تم تحديث المسودة" : "تعذر تطبيق التعديل", result.reason);
+      Alert.alert(result.decision === "accepted" ? t("plan.editAccepted") : t("plan.editRejected"), result.reason);
     },
-    onError: (error) => Alert.alert("تعذر تعديل المسودة", error.message),
+    onError: (error) => Alert.alert(t("plan.editError"), error.message),
   });
   const updateBounds = trpc.plans.updateBounds.useMutation({
     onSuccess: async (result) => {
       await Promise.all([plan.refetch(), activeGoal.refetch()]);
       Alert.alert(
-        result.firstSegmentReady ? "تم تحديث الخطة" : "تم تحديث المسودة",
+        result.firstSegmentReady ? t("plan.boundsUpdated") : t("plan.boundsDraftUpdated"),
         result.firstSegmentReady
-          ? "أُعيد تجهيز الدفعة الأولى بالمدة والوقت الجديدين."
-          : "حُفظت المسودة، لكن تعذر تجهيز الدفعة الأولى الآن ويمكن إعادة المحاولة لاحقًا.",
+          ? t("plan.boundsReady")
+          : t("plan.boundsDeferred"),
       );
     },
-    onError: (error) => Alert.alert("تعذر تحديث المدة والوقت", error.message),
+    onError: (error) => Alert.alert(t("plan.boundsError"), error.message),
   });
   const retrySegment = trpc.plans.retrySegment.useMutation({
     onSuccess: async () => {
@@ -121,9 +123,9 @@ export default function PlanScreen() {
         utils.tasks.current.invalidate(),
         utils.calendar.get.invalidate(),
       ]);
-      Alert.alert("تم تجهيز الدفعة", "يمكنك الآن اعتماد الخطة أو متابعة التعلم.");
+      Alert.alert(t("plan.segmentReady"), t("plan.segmentReadyCopy"));
     },
-    onError: (error) => Alert.alert("تعذر تجهيز الدفعة", error.message),
+    onError: (error) => Alert.alert(t("plan.segmentError"), error.message),
   });
 
   useEffect(() => {
@@ -134,11 +136,11 @@ export default function PlanScreen() {
   }, [plan.data?.dailyMinutes, plan.data?.status, plan.data?.totalDurationDays]);
 
   if (!isAuthenticated) {
-    return <PlanEntryState label="تسجيل الدخول للبدء" icon="login" onPress={() => router.push("/login")} />;
+    return <PlanEntryState label={t("plan.loginEntry")} icon="login" onPress={() => router.push("/login")} />;
   }
   if (activeGoal.isLoading) return <PlanLoading />;
   if (!activeGoal.data) {
-    return <PlanEntryState label="إعداد الهدف" icon="flag" onPress={() => router.push("/onboarding")} />;
+    return <PlanEntryState label={t("plan.goalEntry")} icon="flag" onPress={() => router.push("/onboarding")} />;
   }
   if (plan.isLoading) return <PlanLoading />;
   if (plan.isError) return <PlanError onRetry={() => void plan.refetch()} />;
@@ -217,6 +219,7 @@ export default function PlanScreen() {
 }
 
 function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
+  const { t } = useLanguage();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -234,7 +237,7 @@ function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
         <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="إظهار إجراءات الخطة"
+          accessibilityLabel={t("plan.showActions")}
           onPress={onOpenActions}
           style={({ pressed }) => [styles.heroMenu, pressed && styles.iconPressed]}
         >
@@ -242,8 +245,8 @@ function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
         </Pressable>
       </View>
       <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>الخطة</Text>
-        <Text style={styles.heroSubtitle}>مسارك نحو هدفك</Text>
+        <Text style={styles.heroTitle}>{t("plan.title")}</Text>
+        <Text style={styles.heroSubtitle}>{t("plan.subtitle")}</Text>
       </View>
     </Animated.View>
   );
@@ -262,15 +265,16 @@ function PlanSummaryCard({
   dailyMinutes: number;
   durationDays: number;
 }) {
+  const { language, t } = useLanguage();
   const fill = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fill, { toValue: progress, duration: 450, useNativeDriver: false }).start();
   }, [fill, progress]);
   const stats: { icon: IconName; label: string; value: string }[] = [
-    { icon: "trending-up", label: "تقدّم الخطة", value: `${progress}%` },
-    { icon: "format-list-bulleted", label: "المهام الكلية", value: totalTasks > 0 ? String(totalTasks) : "—" },
-    { icon: "schedule", label: "الوقت اليومي", value: formatStudyTime(dailyMinutes) },
-    { icon: "event-note", label: "مدة الخطة", value: `${durationDays} يوم` },
+    { icon: "trending-up", label: t("plan.progress"), value: `${progress}%` },
+    { icon: "format-list-bulleted", label: t("plan.totalTasks"), value: totalTasks > 0 ? String(totalTasks) : "—" },
+    { icon: "schedule", label: t("profile.dailyTime"), value: formatStudyTime(dailyMinutes, language) },
+    { icon: "event-note", label: t("plan.duration"), value: t("common.days", { count: durationDays }) },
   ];
 
   return (
@@ -278,7 +282,7 @@ function PlanSummaryCard({
       <View style={styles.goalRow}>
         <MaterialIcons name="chevron-left" size={27} color={COLORS.forest} />
         <View style={styles.goalCopy}>
-          <Text style={styles.goalLabel}>هدفك</Text>
+          <Text style={styles.goalLabel}>{t("plan.goal")}</Text>
           <Text numberOfLines={2} style={styles.goalTitle}>{goalTitle}</Text>
         </View>
         <View style={styles.goalIcon}><MaterialIcons name="track-changes" size={30} color={COLORS.forest} /></View>
@@ -301,13 +305,14 @@ function PlanSummaryCard({
 }
 
 function ViewSwitcher({ viewMode, onChange }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void }) {
+  const { t } = useLanguage();
   return (
     <View style={styles.switcher}>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: viewMode === "tasks" }} onPress={() => onChange("tasks")} style={[styles.switchTab, viewMode === "tasks" && styles.switchTabActive]}>
-        <Text style={[styles.switchText, viewMode === "tasks" && styles.switchTextActive]}>المهام</Text>
+        <Text style={[styles.switchText, viewMode === "tasks" && styles.switchTextActive]}>{t("plan.tasks")}</Text>
       </Pressable>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: viewMode === "overview" }} onPress={() => onChange("overview")} style={[styles.switchTab, viewMode === "overview" && styles.switchTabActive]}>
-        <Text style={[styles.switchText, viewMode === "overview" && styles.switchTextActive]}>نظرة عامة</Text>
+        <Text style={[styles.switchText, viewMode === "overview" && styles.switchTextActive]}>{t("plan.overview")}</Text>
       </Pressable>
     </View>
   );
@@ -332,6 +337,7 @@ function JourneyStageCard({
   index: number;
   isLast: boolean;
 }) {
+  const { t } = useLanguage();
   const completed = stage.state === "completed";
   const current = stage.state === "current";
   const locked = stage.state === "locked";
@@ -346,11 +352,11 @@ function JourneyStageCard({
       </View>
       <View style={styles.stageNumberBlock}>
         <Text style={[styles.stageNumber, locked && styles.stageMuted]}>0{index + 1}</Text>
-        <Text style={[styles.stageRange, locked && styles.stageMuted]}>الأيام {stage.startDay}–{stage.endDay}</Text>
+        <Text style={[styles.stageRange, locked && styles.stageMuted]}>{t("plan.daysRange", { start: stage.startDay, end: stage.endDay })}</Text>
       </View>
       <View style={[styles.stageCard, current && styles.stageCardCurrent, locked && styles.stageCardLocked]}>
         <View style={styles.stageTopRow}>
-          {current ? <View style={styles.currentBadge}><View style={styles.currentBadgeDot} /><Text style={styles.currentBadgeText}>الحالي</Text></View> : completed ? <MaterialIcons name="check-circle" size={24} color="#5C7F5D" /> : <MaterialIcons name="lock-outline" size={22} color="#8C9082" />}
+          {current ? <View style={styles.currentBadge}><View style={styles.currentBadgeDot} /><Text style={styles.currentBadgeText}>{t("plan.current")}</Text></View> : completed ? <MaterialIcons name="check-circle" size={24} color="#5C7F5D" /> : <MaterialIcons name="lock-outline" size={22} color="#8C9082" />}
           {!locked && <Image source={{ uri: stageImage }} style={styles.stageIllustration} resizeMode="contain" />}
         </View>
         <Text numberOfLines={2} style={[styles.stageTitle, locked && styles.stageMuted]}>{stage.title}</Text>
@@ -422,18 +428,19 @@ function EditPlanCard({
   approvePending: boolean;
   retryPending: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <View style={styles.editCard}>
       <Image source={{ uri: EDIT_PLANT_ASSET }} style={styles.editPlant} resizeMode="contain" />
       <View style={styles.editIntro}>
-        <Text style={styles.editTitle}>تعديل الخطة</Text>
-        <Text style={styles.editCopy}>يمكنك طلب تعديل في الخطة حسب احتياجك.</Text>
+        <Text style={styles.editTitle}>{t("plan.editTitle")}</Text>
+        <Text style={styles.editCopy}>{t("plan.editCopy")}</Text>
       </View>
       <View style={styles.editActions}>
-        <PlanAction label="تعديل الخطة" icon="edit" onPress={onOpen} compact />
+        <PlanAction label={t("plan.edit")} icon="edit" onPress={onOpen} compact />
         <Pressable onPress={onDecline} style={({ pressed }) => [styles.declineButton, pressed && styles.pressed]}>
           <MaterialIcons name="check-circle" size={18} color={COLORS.forest} />
-          <Text style={styles.declineText}>لا، لا أريد تعديل</Text>
+          <Text style={styles.declineText}>{t("plan.declineEdit")}</Text>
         </Pressable>
       </View>
 
@@ -441,20 +448,20 @@ function EditPlanCard({
         <View style={styles.editPanel}>
           {failedSegments.map((segment) => (
             <View key={segment.startDay} style={styles.failureRow}>
-              <Text style={styles.failureText}>تعذر تجهيز الأيام {segment.startDay}–{segment.endDay}.</Text>
-              <PlanAction label="إعادة التجهيز" icon="refresh" variant="soft" loading={retryPending} onPress={() => onRetrySegment(segment.startDay)} compact />
+              <Text style={styles.failureText}>{t("plan.segmentFailed", { start: segment.startDay, end: segment.endDay })}</Text>
+              <PlanAction label={t("plan.retryGeneration")} icon="refresh" variant="soft" loading={retryPending} onPress={() => onRetrySegment(segment.startDay)} compact />
             </View>
           ))}
-          <Text style={styles.inputLabel}>تعديل المدة والوقت</Text>
+          <Text style={styles.inputLabel}>{t("plan.adjustBounds")}</Text>
           <View style={styles.boundsRow}>
-            <TextInput value={dailyMinutes} onChangeText={onDailyMinutesChange} placeholder="دقيقة يوميًا" placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
-            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder="عدد الأيام" placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
+            <TextInput value={dailyMinutes} onChangeText={onDailyMinutesChange} placeholder={t("plan.dailyMinutesPlaceholder")} placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
+            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder={t("plan.durationPlaceholder")} placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
           </View>
-          <PlanAction label="حفظ المدة والوقت" icon="schedule" variant="soft" loading={boundsPending} disabled={!Number.isInteger(Number(dailyMinutes)) || !Number.isInteger(Number(durationDays))} onPress={onSaveBounds} />
-          <Text style={styles.inputLabel}>عدّل تنويع المهام أو شدتها</Text>
-          <TextInput value={editRequest} onChangeText={onEditRequestChange} placeholder="مثال: اجعل الأيام العملية أكثر تنوعًا" placeholderTextColor="#9A968A" style={styles.editInput} multiline maxLength={1500} />
-          <PlanAction label="تحديث المسودة" icon="auto-awesome" variant="soft" loading={editPending} disabled={editRequest.trim().length < 4} onPress={onEdit} />
-          <PlanAction label="اعتماد الخطة وبدء اليوم الأول" icon="play-circle-filled" loading={approvePending} onPress={onApprove} />
+          <PlanAction label={t("plan.saveBounds")} icon="schedule" variant="soft" loading={boundsPending} disabled={!Number.isInteger(Number(dailyMinutes)) || !Number.isInteger(Number(durationDays))} onPress={onSaveBounds} />
+          <Text style={styles.inputLabel}>{t("plan.editTasksLabel")}</Text>
+          <TextInput value={editRequest} onChangeText={onEditRequestChange} placeholder={t("plan.editPlaceholder")} placeholderTextColor="#9A968A" style={styles.editInput} multiline maxLength={1500} />
+          <PlanAction label={t("plan.updateDraft")} icon="auto-awesome" variant="soft" loading={editPending} disabled={editRequest.trim().length < 4} onPress={onEdit} />
+          <PlanAction label={t("plan.approveStart")} icon="play-circle-filled" loading={approvePending} onPress={onApprove} />
         </View>
       )}
     </View>
@@ -462,54 +469,59 @@ function EditPlanCard({
 }
 
 function ApprovedPlanCard({ onOpenTask }: { onOpenTask: () => void }) {
+  const { t } = useLanguage();
   return (
     <View style={styles.approvedCard}>
       <View style={styles.approvedIcon}><MaterialIcons name="verified" size={28} color={COLORS.forest} /></View>
-      <View style={styles.approvedCopyBlock}><Text style={styles.approvedTitle}>تم اعتماد الخطة</Text><Text style={styles.approvedCopy}>أول مهمة أصبحت جاهزة ضمن مسارك.</Text></View>
-      <PlanAction label="فتح مهمة اليوم" icon="play-circle-filled" onPress={onOpenTask} compact />
+      <View style={styles.approvedCopyBlock}><Text style={styles.approvedTitle}>{t("plan.approved")}</Text><Text style={styles.approvedCopy}>{t("plan.approvedCopy")}</Text></View>
+      <PlanAction label={t("plan.openTodayTask")} icon="play-circle-filled" onPress={onOpenTask} compact />
     </View>
   );
 }
 
 function CreatePlanCard({ onPress, loading }: { onPress: () => void; loading: boolean }) {
+  const { t } = useLanguage();
   return (
     <View style={styles.createCard}>
       <View style={styles.createIcon}><MaterialIcons name="alt-route" size={34} color={COLORS.forest} /></View>
-      <Text style={styles.createTitle}>جاهز لبناء الخريطة</Text>
-      <Text style={styles.createCopy}>سننشئ مسارًا كاملًا نحو هدفك، ثم نجهّز تفاصيل البداية بخطوات واضحة.</Text>
-      <PlanAction label="إنشاء الخطة" icon="auto-awesome" loading={loading} onPress={onPress} />
+      <Text style={styles.createTitle}>{t("plan.readyMap")}</Text>
+      <Text style={styles.createCopy}>{t("plan.readyMapCopy")}</Text>
+      <PlanAction label={t("plan.create")} icon="auto-awesome" loading={loading} onPress={onPress} />
     </View>
   );
 }
 
 function PlanEntryState({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
       <View style={styles.entryIcon}><MaterialIcons name="spa" size={34} color={COLORS.forest} /></View>
-      <Text style={styles.entryTitle}>مسارك يبدأ بهدف واضح</Text>
-      <Text style={styles.entryCopy}>رتّب ما تريد تعلّمه ودع الخطة ترافقك خطوة بخطوة.</Text>
+      <Text style={styles.entryTitle}>{t("plan.entryTitle")}</Text>
+      <Text style={styles.entryCopy}>{t("plan.entryCopy")}</Text>
       <PlanAction label={label} icon={icon} onPress={onPress} style={styles.entryAction} />
     </ScreenContainer>
   );
 }
 
 function PlanError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
       <View style={styles.entryIcon}><MaterialIcons name="cloud-off" size={34} color={COLORS.error} /></View>
-      <Text style={styles.entryTitle}>تعذر تحميل الخطة الآن</Text>
-      <Text style={styles.entryCopy}>تحقّق من اتصالك ثم أعد المحاولة.</Text>
-      <PlanAction label="إعادة المحاولة" icon="refresh" variant="soft" onPress={onRetry} style={styles.entryAction} />
+      <Text style={styles.entryTitle}>{t("plan.loadError")}</Text>
+      <Text style={styles.entryCopy}>{t("plan.loadErrorCopy")}</Text>
+      <PlanAction label={t("common.retry")} icon="refresh" variant="soft" onPress={onRetry} style={styles.entryAction} />
     </ScreenContainer>
   );
 }
 
 function PlanLoading() {
+  const { t } = useLanguage();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
       <View style={styles.entryIcon}><MaterialIcons name="alt-route" size={34} color={COLORS.forest} /></View>
       <ActivityIndicator color={COLORS.forest} size="small" />
-      <Text style={styles.loadingText}>نجهّز مسارك بهدوء…</Text>
+      <Text style={styles.loadingText}>{t("common.loadingJourney")}</Text>
     </ScreenContainer>
   );
 }
@@ -571,12 +583,12 @@ function buildJourneyStages(
   });
 }
 
-function formatStudyTime(minutes: number) {
+function formatStudyTime(minutes: number, language: "ar" | "en") {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${minutes} د`;
-  if (remainingMinutes === 0) return `${hours} س`;
-  return `${hours} س ${remainingMinutes} د`;
+  if (hours === 0) return language === "ar" ? `${minutes} د` : `${minutes}m`;
+  if (remainingMinutes === 0) return language === "ar" ? `${hours} س` : `${hours}h`;
+  return language === "ar" ? `${hours} س ${remainingMinutes} د` : `${hours}h ${remainingMinutes}m`;
 }
 
 const styles = StyleSheet.create({
