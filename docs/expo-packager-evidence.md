@@ -19,3 +19,9 @@ The Manus-forwarded origin returned a valid Expo manifest, Android JavaScript bu
 ## Compatibility check
 
 `expo-doctor` reported missing `expo-asset` as a peer dependency of `expo-audio` for builds outside Expo Go and listed patch-level Expo SDK 54 package mismatches. Neither result explains a Packager error before the JavaScript bundle has loaded, so no dependency upgrade was applied during this diagnosis.
+
+## Packager health endpoint
+
+The Expo/Metro health route was measured directly on 2026-08-14. Local HTTP, forwarded Manus HTTP, and forwarded Manus HTTPS each returned `200` with the exact body `packager-status:running`. Neither forwarded request returned a redirect. This rules out an HTTP-to-HTTPS redirect or altered `/status` response as the explanation for the Android message.
+
+For context, Expo documents historical Packager status failures at `https://github.com/expo/expo-cli/issues/52`; the documented failure condition is inability to reach `/status`, which was not observed here. Expo maintainers also identify device-to-host connectivity as the relevant boundary for the same message at `https://github.com/expo/expo/issues/8606`.
