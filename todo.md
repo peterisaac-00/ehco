@@ -90,3 +90,5 @@
 - [ ] التحقق من أن Expo Go المثبت على Android يدعم SDK 54 قبل تجربة أي تعديل آخر في الشبكة أو الكود.
 - [ ] اختبار WebSocket وEXPO_PACKAGER_PROXY_URL بعنوان HTTP صريح قبل اعتماد أو رفض فرضية النفق.
 - [x] اختبار WebSocket عبر `/message` و`/hot` و`/onchange`: أعادت جميعها 502 عبر HTTP وHTTPS، ما يثبت فشل طبقة البروكسي الحية.
+- [ ] مراجعة كل commits وتحديد أي أثر فعلي لـ expo-dev-client أو Android/iOS أو APK قبل تغيير حالة Expo Go.
+- [x] مراجعة كل commits وتحديد أي أثر فعلي لـ expo-dev-client أو Android/iOS أو APK: لم يوجد أي أثر محلي أو تاريخي.

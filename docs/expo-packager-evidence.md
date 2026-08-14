@@ -35,3 +35,7 @@ The downloaded Stack Overflow case at `https://stackoverflow.com/questions/79332
 ## WebSocket transport result
 
 On 2026-08-14, WebSocket upgrade requests to the forwarded Manus origin were tested on the Metro paths `/message`, `/hot?platform=android&dev=true`, and `/onchange`. Every path returned `502 Bad Gateway` over both HTTP and HTTPS. In contrast, the ordinary `/status` request returned `200` and `packager-status:running` over both protocols. This is a direct transport failure in the forwarded WebSocket path and matches the observed Expo Go behavior; it is not caused by any Ehco screen, API route, database operation, or Metro health endpoint.
+
+## APK workflow and Git history audit
+
+The full local and Git history audit found no declaration, lockfile entry, or installed copy of `expo-dev-client`. No commit has ever tracked an `android/` or `ios/` tree. Both directories are absent in the current workspace; the initial project `.gitignore` already ignored them. The APK-related commits added only EAS project configuration, an `eas.json` preview profile, and a GitHub Actions workflow. Those artifacts were later removed, and the current `package.json`, lockfile, app config, Metro config, and Babel config have no remaining difference from the language/design reference for APK workflow purposes. Therefore, the evidence does not support a prebuild/dev-client conversion as the source of the Expo Go failure.
