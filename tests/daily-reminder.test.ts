@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const storage = vi.hoisted(() => new Map<string, string>());
+const runtime = vi.hoisted(() => ({ executionEnvironment: "standalone" }));
 const notifications = vi.hoisted(() => ({
   setNotificationHandler: vi.fn(),
   getPermissionsAsync: vi.fn(),
@@ -13,6 +14,10 @@ const notifications = vi.hoisted(() => ({
 }));
 
 vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+vi.mock("expo-constants", () => ({
+  default: runtime,
+  ExecutionEnvironment: { StoreClient: "storeClient" },
+}));
 vi.mock("expo-notifications", () => notifications);
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
@@ -28,6 +33,7 @@ describe("daily task-aware reminder", () => {
   beforeEach(() => {
     storage.clear();
     vi.clearAllMocks();
+    runtime.executionEnvironment = "standalone";
     notifications.getPermissionsAsync.mockResolvedValue({ status: "granted" });
     notifications.cancelScheduledNotificationAsync.mockResolvedValue(undefined);
     notifications.scheduleNotificationAsync.mockResolvedValueOnce("reminder-1").mockResolvedValueOnce("reminder-2");
@@ -59,5 +65,13 @@ describe("daily task-aware reminder", () => {
     await expect(enableDailyReminder("مراجعة الجبر")).resolves.toBe("denied");
     expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(await isDailyReminderEnabled()).toBe(false);
+  });
+
+  it("does not load notifications in Expo Go", async () => {
+    runtime.executionEnvironment = "storeClient";
+
+    await expect(enableDailyReminder("مراجعة الجبر")).resolves.toBe("unsupported");
+    expect(notifications.getPermissionsAsync).not.toHaveBeenCalled();
+    expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 });

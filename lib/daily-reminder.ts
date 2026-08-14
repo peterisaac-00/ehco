@@ -1,25 +1,46 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
 
 const REMINDER_ID_KEY = "ehco.daily-reminder.id";
 const REMINDER_TASK_TITLE_KEY = "ehco.daily-reminder.task-title";
 const REMINDER_HOUR = 20;
 const FALLBACK_REMINDER_BODY = "خطوة واحدة الآن تقرّبك من هدفك في Ehco.";
+type NotificationsModule = typeof import("expo-notifications");
 
-if (Platform.OS !== "web") {
-  try {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      }),
-    });
-  } catch {
-    // Ignore notifications handler errors in Expo Go or limited runtimes
+let notificationsPromise: Promise<NotificationsModule | null> | null = null;
+let notificationHandlerConfigured = false;
+
+function isExpoGoRuntime() {
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+}
+
+/**
+ * Avoid importing expo-notifications while Expo Go boots on Android.
+ * SDK 53+ emits a red error at module import time because remote push is
+ * unavailable there, even when the app only needs local reminders.
+ */
+async function getNotificationsModule(): Promise<NotificationsModule | null> {
+  if (Platform.OS === "web" || isExpoGoRuntime()) return null;
+  if (!notificationsPromise) {
+    notificationsPromise = import("expo-notifications")
+      .then((Notifications) => {
+        if (!notificationHandlerConfigured) {
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldShowBanner: true,
+              shouldShowList: true,
+              shouldPlaySound: false,
+              shouldSetBadge: false,
+            }),
+          });
+          notificationHandlerConfigured = true;
+        }
+        return Notifications;
+      })
+      .catch(() => null);
   }
+  return notificationsPromise;
 }
 
 export async function isDailyReminderEnabled() {
@@ -27,7 +48,8 @@ export async function isDailyReminderEnabled() {
 }
 
 export async function enableDailyReminder(taskTitle?: string | null): Promise<"enabled" | "denied" | "unsupported"> {
-  if (Platform.OS === "web") return "unsupported";
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return "unsupported";
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("learning-reminders", {
@@ -47,7 +69,8 @@ export async function enableDailyReminder(taskTitle?: string | null): Promise<"e
 }
 
 export async function scheduleTaskAwareReminder(taskTitle?: string | null) {
-  if (Platform.OS === "web") return;
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return;
   try {
     await disableDailyReminder();
     const normalizedTitle = taskTitle?.trim().slice(0, 140) || null;
@@ -87,7 +110,8 @@ export async function syncDailyReminderTask(taskTitle?: string | null) {
 export async function disableDailyReminder() {
   try {
     const identifier = await AsyncStorage.getItem(REMINDER_ID_KEY);
-    if (identifier && Platform.OS !== "web") {
+    const Notifications = await getNotificationsModule();
+    if (identifier && Notifications) {
       await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
     }
     await AsyncStorage.removeItem(REMINDER_ID_KEY);
