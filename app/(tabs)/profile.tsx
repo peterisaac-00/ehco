@@ -1,24 +1,75 @@
-import { useEffect, useState } from "react";
-import { Alert, Text, View, StyleSheet } from "react-native";
-import { router } from "expo-router";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { router, useNavigation } from "expo-router";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { PrimaryButton } from "@/components/primary-button";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
-import { disableDailyReminder, enableDailyReminder, isDailyReminderEnabled, syncDailyReminderTask } from "@/lib/daily-reminder";
+import {
+  disableDailyReminder,
+  enableDailyReminder,
+  isDailyReminderEnabled,
+  syncDailyReminderTask,
+} from "@/lib/daily-reminder";
 import { trpc } from "@/lib/trpc";
+import Svg, { Circle, Path } from "react-native-svg";
+
+const COLORS = {
+  ivory: "#FDF9F4",
+  cream: "#F7EDE0",
+  forest: "#254631",
+  forestMuted: "#46604D",
+  sage: "#A8B39E",
+  sageLight: "#E6E7D8",
+  warmGray: "#8D8B7C",
+  border: "#EDE4D8",
+  card: "#FFFDF9",
+  danger: "#B74D43",
+  dangerSurface: "#FCECE5",
+} as const;
+
+const HERO_ILLUSTRATION = "/manus-storage/ehco-plan-mountain-path_65e37116.png";
+const AVATAR_ILLUSTRATION = "/manus-storage/ehco-profile-avatar_79371254.png";
+const MOTIVATION_ILLUSTRATION = "/manus-storage/ehco-profile-motivation_09d63d51.png";
+
+type IconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export default function ProfileScreen() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const navigation = useNavigation();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderLoading, setReminderLoading] = useState(false);
   const currentTask = trpc.tasks.current.useQuery(undefined, { enabled: isAuthenticated });
-  useEffect(() => { void isDailyReminderEnabled().then(setReminderEnabled); }, []);
+  const activeGoal = trpc.goals.active.useQuery(undefined, { enabled: isAuthenticated });
+  const calendar = trpc.calendar.get.useQuery(undefined, { enabled: isAuthenticated });
+
+  useEffect(() => {
+    navigation.setOptions({
+      tabBarActiveTintColor: COLORS.forest,
+      tabBarInactiveTintColor: "#8F9586",
+      tabBarStyle: { backgroundColor: COLORS.ivory, borderTopColor: COLORS.border, borderTopWidth: 0.5 },
+    });
+  }, [navigation]);
+
+  useEffect(() => {
+    void isDailyReminderEnabled().then(setReminderEnabled);
+  }, []);
   useEffect(() => {
     if (reminderEnabled) void syncDailyReminderTask(currentTask.data?.task.title);
   }, [currentTask.data?.task.title, reminderEnabled]);
 
   const toggleReminder = async () => {
+    if (reminderLoading) return;
     setReminderLoading(true);
     try {
       if (reminderEnabled) {
@@ -33,30 +84,242 @@ export default function ProfileScreen() {
       setReminderLoading(false);
     }
   };
+
+  if (loading) return <ProfileLoading />;
+
+  const completedDays = calendar.data?.days.filter((task) => task.status === "completed").length ?? 0;
+  const totalDays = calendar.data?.days.length ?? 0;
+  const progress = totalDays ? Math.round((completedDays / totalDays) * 100) : null;
+
   return (
-    <ScreenContainer className="p-5">
-      <View style={styles.content}>
-        <Text className="text-3xl font-bold text-foreground">الحساب</Text>
-        <View style={styles.card}>
-          <Text style={styles.name}>{user?.name ?? "ضيف"}</Text>
-          <Text style={styles.email}>{user?.email ?? "سجّل الدخول لحفظ تقدمك"}</Text>
-        </View>
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>إعدادات التعلّم</Text>
-          <Text style={styles.detail}>تنبيه يومي محلي عند الساعة 8:00 مساءً وفق توقيت جهازك.</Text>
-        </View>
-        <PrimaryButton label={reminderEnabled ? "إيقاف التنبيه اليومي" : "تفعيل التنبيه اليومي"} variant="secondary" onPress={() => void toggleReminder()} loading={reminderLoading} />
-        {isAuthenticated ? <PrimaryButton label="تسجيل الخروج" variant="secondary" onPress={() => void logout()} /> : <PrimaryButton label="تسجيل الدخول" onPress={() => router.push("/login")} />}
-      </View>
+    <ScreenContainer containerClassName="bg-[#FDF9F4]">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <ProfileHero reminderEnabled={reminderEnabled} />
+        <ProfileIdentityCard
+          name={user?.name ?? "ضيف"}
+          email={user?.email ?? "سجّل الدخول لحفظ تقدمك"}
+          isAuthenticated={isAuthenticated}
+          goalTitle={activeGoal.data?.title}
+          progress={progress}
+          dailyMinutes={activeGoal.data?.dailyMinutes}
+        />
+        <LearningSettingsCard
+          dailyMinutes={activeGoal.data?.dailyMinutes}
+          currentLevel={activeGoal.data?.currentLevel}
+          reminderEnabled={reminderEnabled}
+          reminderLoading={reminderLoading}
+          onToggleReminder={() => void toggleReminder()}
+        />
+        {isAuthenticated && <LogoutButton onPress={() => void logout()} />}
+        {!isAuthenticated && <ProfileAction label="تسجيل الدخول" icon="login" onPress={() => router.push("/login")} />}
+        <MotivationCard />
+      </ScrollView>
     </ScreenContainer>
   );
 }
 
+function ProfileHero({ reminderEnabled }: { reminderEnabled: boolean }) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
+  }, [entrance]);
+  return (
+    <Animated.View style={[styles.hero, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+      <Image source={{ uri: HERO_ILLUSTRATION }} style={styles.heroIllustration} resizeMode="cover" />
+      <ProfileLandscape />
+      <View style={styles.heroTopRow}>
+        <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
+        <View style={styles.heroBell}><MaterialIcons name="notifications-none" size={25} color={COLORS.forest} />{reminderEnabled && <View style={styles.notificationDot} />}</View>
+      </View>
+      <View style={styles.heroCopy}>
+        <Text style={styles.heroTitle}>الحساب</Text>
+        <Text style={styles.heroSubtitle}>إدارة ملفك الشخصي وإعداداتك</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function ProfileLandscape() {
+  return (
+    <Svg width="100%" height="172" viewBox="0 0 390 172" style={styles.landscape}>
+      <Circle cx="260" cy="42" r="23" fill="#F7C982" opacity="0.66" />
+      <Path d="M0 129 L76 73 L130 122 L197 42 L263 113 L318 77 L390 132 V172 H0 Z" fill="#DCE3D4" opacity="0.78" />
+      <Path d="M0 151 L108 89 L176 141 L250 83 L314 131 L365 91 L390 105 V172 H0 Z" fill="#B7C5B0" opacity="0.7" />
+      <Path d="M0 159 C69 136 107 145 160 151 C220 158 296 126 390 143 V172 H0 Z" fill="#91A68C" opacity="0.45" />
+      <Path d="M304 116 L318 85 L332 116 Z M329 120 L343 80 L357 120 Z M350 123 L361 93 L372 123 Z" fill="#385A41" opacity="0.72" />
+      <Path d="M28 154 C105 140 169 159 246 153" fill="none" stroke="#F5E5C9" strokeWidth="4" strokeLinecap="round" opacity="0.78" />
+    </Svg>
+  );
+}
+
+function ProfileIdentityCard({
+  name,
+  email,
+  isAuthenticated,
+  goalTitle,
+  progress,
+  dailyMinutes,
+}: {
+  name: string;
+  email: string;
+  isAuthenticated: boolean;
+  goalTitle?: string;
+  progress: number | null;
+  dailyMinutes?: number;
+}) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(entrance, { toValue: 1, duration: 340, useNativeDriver: true }).start();
+  }, [entrance]);
+  const stats = [
+    ...(progress === null ? [] : [{ icon: "trending-up" as IconName, label: "التقدّم العام", value: `${progress}%` }]),
+    ...(goalTitle ? [{ icon: "track-changes" as IconName, label: "الهدف الحالي", value: goalTitle }] : []),
+    ...(dailyMinutes ? [{ icon: "schedule" as IconName, label: "الوقت اليومي", value: formatStudyTime(dailyMinutes) }] : []),
+  ].slice(0, 3);
+
+  return (
+    <Animated.View style={[styles.identityCard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+      <View style={styles.identityRow}>
+        <Image source={{ uri: AVATAR_ILLUSTRATION }} style={styles.avatar} />
+        <View style={styles.identityCopy}><Text numberOfLines={1} style={styles.userName}>{name} <Text style={styles.nameLeaf}>⌁</Text></Text><Text numberOfLines={1} style={styles.userEmail}>{email}</Text><View style={styles.statusPill}><MaterialIcons name="check-circle" size={15} color="#547853" /><Text style={styles.statusText}>{isAuthenticated ? "مستمر في رحلتي" : "مرحبًا بك"}</Text></View></View>
+      </View>
+      {stats.length > 0 && <><View style={styles.identityDivider} /><View style={styles.profileStats}>{stats.map((stat, index) => <ProfileStat key={stat.label} {...stat} bordered={index !== stats.length - 1} />)}</View></>}
+    </Animated.View>
+  );
+}
+
+function ProfileStat({ icon, label, value, bordered }: { icon: IconName; label: string; value: string; bordered: boolean }) {
+  return <View style={[styles.profileStat, bordered && styles.profileStatBorder]}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /><Text style={styles.statLabel}>{label}</Text><Text numberOfLines={1} style={styles.statValue}>{value}</Text></View>;
+}
+
+function LearningSettingsCard({
+  dailyMinutes,
+  currentLevel,
+  reminderEnabled,
+  reminderLoading,
+  onToggleReminder,
+}: {
+  dailyMinutes?: number;
+  currentLevel?: "beginner" | "intermediate" | "advanced";
+  reminderEnabled: boolean;
+  reminderLoading: boolean;
+  onToggleReminder: () => void;
+}) {
+  const rows = [
+    ...(dailyMinutes ? [{ icon: "schedule" as IconName, title: "الوقت المتاح يوميًا", value: formatStudyTime(dailyMinutes) }] : []),
+    ...(currentLevel ? [{ icon: "speed" as IconName, title: "مستوى الخبرة", value: levelLabel(currentLevel) }] : []),
+  ];
+  return (
+    <View style={styles.sectionWrap}>
+      <SectionHeading label="إعدادات التعلّم" icon="menu-book" />
+      <View style={styles.settingsCard}>
+        {rows.map((row, index) => <LearningSettingRow key={row.title} {...row} divided={index !== rows.length - 1 || true} />)}
+        <ReminderRow enabled={reminderEnabled} loading={reminderLoading} onPress={onToggleReminder} />
+      </View>
+    </View>
+  );
+}
+
+function LearningSettingRow({ icon, title, value, divided }: { icon: IconName; title: string; value: string; divided: boolean }) {
+  return <View style={[styles.settingRow, divided && styles.settingRowDivided]}><View style={styles.settingIcon}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>{title}</Text><Text style={styles.settingValue}>{value}</Text></View></View>;
+}
+
+function ReminderRow({ enabled, loading, onPress }: { enabled: boolean; loading: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: enabled, busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && !loading && styles.pressed]}>
+      <View style={styles.settingIcon}><MaterialIcons name="notifications" size={22} color={COLORS.forestMuted} /></View>
+      <View style={styles.settingCopy}><Text style={styles.settingTitle}>التنبيه اليومي</Text><Text style={styles.settingValue}>{enabled ? "إيقاف التنبيه اليومي" : "تفعيل التنبيه اليومي"}</Text></View>
+      {loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={[styles.toggle, enabled && styles.toggleEnabled]}><View style={[styles.toggleKnob, enabled && styles.toggleKnobEnabled]} /></View>}
+    </Pressable>
+  );
+}
+
+function SectionHeading({ label, icon }: { label: string; icon: IconName }) {
+  return <View style={styles.sectionHeading}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /><Text style={styles.sectionHeadingText}>{label}</Text></View>;
+}
+
+function LogoutButton({ onPress }: { onPress: () => void }) {
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color={COLORS.danger} /><Text style={styles.logoutText}>تسجيل الخروج</Text></Pressable>;
+}
+
+function MotivationCard() {
+  return <View style={styles.motivationCard}><Image source={{ uri: MOTIVATION_ILLUSTRATION }} style={styles.motivationIllustration} resizeMode="cover" /><View style={styles.motivationCopy}><Text style={styles.motivationTitle}>استمر في رحلتك</Text><Text style={styles.motivationText}>كل يوم تقدّمك خطوة أقرب نحو هدفك.</Text></View></View>;
+}
+
+function ProfileAction({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color={COLORS.ivory} /><Text style={styles.primaryActionText}>{label}</Text></Pressable>;
+}
+
+function ProfileLoading() {
+  return <ScreenContainer containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6"><View style={styles.loadingIcon}><MaterialIcons name="spa" size={34} color={COLORS.forest} /></View><ActivityIndicator color={COLORS.forest} size="small" /><Text style={styles.loadingText}>نجهّز مساحتك بهدوء…</Text></ScreenContainer>;
+}
+
+function formatStudyTime(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!hours) return `${minutes} د`;
+  return remainder ? `${hours} س ${remainder} د` : `${hours} س`;
+}
+
+function levelLabel(level: "beginner" | "intermediate" | "advanced") {
+  return level === "beginner" ? "مبتدئ" : level === "intermediate" ? "متوسط" : "متقدم";
+}
+
 const styles = StyleSheet.create({
-  content: { flex: 1, gap: 18, paddingTop: 12 },
-  card: { backgroundColor: "#FFFFFF", padding: 18, borderRadius: 20, borderWidth: 1, borderColor: "#E2E8F0", gap: 6 },
-  name: { color: "#0F172A", fontSize: 20, fontWeight: "800", textAlign: "right" },
-  email: { color: "#64748B", fontSize: 14, textAlign: "right" },
-  sectionTitle: { color: "#0F172A", fontSize: 16, fontWeight: "800", textAlign: "right" },
-  detail: { color: "#64748B", fontSize: 14, lineHeight: 21, textAlign: "right" },
+  content: { paddingBottom: 42, gap: 21 },
+  hero: { height: 272, overflow: "hidden", position: "relative", justifyContent: "space-between", paddingHorizontal: 22, paddingTop: 14, paddingBottom: 29 },
+  heroIllustration: { ...StyleSheet.absoluteFillObject, opacity: 0.98 },
+  landscape: { position: "absolute", left: 0, right: 0, bottom: -7, opacity: 0.88 },
+  heroTopRow: { flexDirection: "row", justifyContent: "space-between", zIndex: 2 },
+  heroBotanical: { width: 50, height: 50, borderRadius: 25, backgroundColor: "rgba(255,253,249,0.9)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#F0E9DF", shadowColor: "#6C604D", shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  heroBell: { width: 50, height: 50, borderRadius: 25, backgroundColor: "rgba(255,253,249,0.9)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#F0E9DF", shadowColor: "#6C604D", shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  notificationDot: { position: "absolute", top: 9, right: 9, width: 8, height: 8, borderRadius: 4, backgroundColor: "#D88652", borderWidth: 1.5, borderColor: COLORS.ivory },
+  heroCopy: { zIndex: 2, alignItems: "flex-start", gap: 3 },
+  heroTitle: { color: COLORS.forest, fontSize: 48, fontWeight: "800", letterSpacing: -1.5, lineHeight: 59, textAlign: "left" },
+  heroSubtitle: { color: COLORS.forestMuted, fontSize: 16, fontWeight: "500", textAlign: "left" },
+
+  identityCard: { marginHorizontal: 18, marginTop: -14, padding: 20, borderRadius: 28, backgroundColor: COLORS.card, gap: 17, shadowColor: "#5E5748", shadowOpacity: 0.09, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 3 },
+  identityRow: { flexDirection: "row-reverse", alignItems: "center", gap: 15 },
+  avatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: "#E9EADD" },
+  identityCopy: { flex: 1, alignItems: "flex-start", gap: 5 },
+  userName: { color: COLORS.forest, fontSize: 24, fontWeight: "800", lineHeight: 30, textAlign: "left" },
+  nameLeaf: { color: "#78906E", fontSize: 18 },
+  userEmail: { color: COLORS.forestMuted, fontSize: 13, textAlign: "left" },
+  statusPill: { flexDirection: "row-reverse", alignItems: "center", gap: 5, borderRadius: 12, backgroundColor: "#E8F0E3", paddingHorizontal: 9, paddingVertical: 5 },
+  statusText: { color: "#547853", fontSize: 11, fontWeight: "800" },
+  identityDivider: { height: 1, backgroundColor: COLORS.border },
+  profileStats: { flexDirection: "row-reverse", justifyContent: "space-between" },
+  profileStat: { flex: 1, alignItems: "center", gap: 4, paddingHorizontal: 6 },
+  profileStatBorder: { borderLeftWidth: 1, borderLeftColor: "#F0EAE0" },
+  statLabel: { color: COLORS.forestMuted, fontSize: 10, fontWeight: "700", textAlign: "center" },
+  statValue: { color: COLORS.forest, fontSize: 13, fontWeight: "800", textAlign: "center" },
+
+  sectionWrap: { marginHorizontal: 18, gap: 10 },
+  sectionHeading: { flexDirection: "row-reverse", alignItems: "center", gap: 6, paddingHorizontal: 3 },
+  sectionHeadingText: { color: COLORS.forest, fontSize: 17, fontWeight: "800", textAlign: "right" },
+  settingsCard: { borderRadius: 25, overflow: "hidden", backgroundColor: COLORS.card, paddingHorizontal: 17, shadowColor: "#5E5748", shadowOpacity: 0.05, shadowRadius: 11, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
+  settingRow: { minHeight: 74, flexDirection: "row-reverse", alignItems: "center", gap: 13 },
+  settingRowDivided: { borderBottomWidth: 1, borderBottomColor: "#F0EAE0" },
+  settingIcon: { width: 43, height: 43, borderRadius: 22, backgroundColor: "#EEF0E4", alignItems: "center", justifyContent: "center" },
+  settingCopy: { flex: 1, gap: 3, alignItems: "flex-start" },
+  settingTitle: { color: COLORS.forest, fontSize: 15, fontWeight: "800", textAlign: "left" },
+  settingValue: { color: COLORS.forestMuted, fontSize: 12.5, textAlign: "left" },
+  toggle: { width: 50, height: 29, borderRadius: 15, padding: 3, backgroundColor: "#CFD4C6", justifyContent: "center" },
+  toggleEnabled: { backgroundColor: COLORS.forest },
+  toggleKnob: { width: 23, height: 23, borderRadius: 12, backgroundColor: COLORS.card, alignSelf: "flex-start" },
+  toggleKnobEnabled: { alignSelf: "flex-end" },
+
+  logoutButton: { minHeight: 55, marginHorizontal: 18, borderRadius: 17, borderWidth: 1, borderColor: "#F2D7CF", backgroundColor: COLORS.dangerSurface, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 9 },
+  logoutText: { color: COLORS.danger, fontSize: 15, fontWeight: "800" },
+  motivationCard: { minHeight: 124, marginHorizontal: 18, overflow: "hidden", borderRadius: 25, backgroundColor: "#F8F1E7", justifyContent: "center", paddingHorizontal: 23 },
+  motivationIllustration: { ...StyleSheet.absoluteFillObject, opacity: 0.93 },
+  motivationCopy: { maxWidth: "65%", alignItems: "flex-start", gap: 5, zIndex: 1 },
+  motivationTitle: { color: COLORS.forest, fontSize: 21, fontWeight: "800", textAlign: "left" },
+  motivationText: { color: COLORS.forestMuted, fontSize: 12, lineHeight: 19, textAlign: "left" },
+
+  primaryAction: { minHeight: 54, marginHorizontal: 18, borderRadius: 16, backgroundColor: COLORS.forest, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8 },
+  primaryActionText: { color: COLORS.ivory, fontSize: 15, fontWeight: "800" },
+  loadingIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#E8EBDD", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  loadingText: { marginTop: 13, color: COLORS.forestMuted, fontSize: 14 },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
 });
