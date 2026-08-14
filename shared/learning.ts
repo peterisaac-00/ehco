@@ -4,14 +4,14 @@ export const LEARNING_LIMITS = {
   minDailyMinutes: 30,
   maxDailyMinutes: 480,
   minDurationDays: 1,
-  maxDurationDays: 90,
+  maxDurationDays: 150,
   planSegmentDays: 7,
   maxTasksPerDay: 8,
   maxPlanTasks: 500,
   passingScore: 70,
   maxPlanGenerations: 3,
   maxPlanEdits: 10,
-  maxStudyWorkloadMinutes: 43_200,
+  maxStudyWorkloadMinutes: 72_000,
 } as const;
 
 export const currentLevelSchema = z.enum(["beginner", "intermediate", "advanced"]);

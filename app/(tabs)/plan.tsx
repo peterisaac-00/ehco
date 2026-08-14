@@ -6,6 +6,8 @@ import {
   Alert,
   Animated,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -151,7 +153,8 @@ export default function PlanScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]">
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} contentContainerStyle={styles.content}>
         <PlanHero onOpenActions={() => setEditExpanded(true)} />
 
         {!draft ? (
@@ -208,6 +211,7 @@ export default function PlanScreen() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
@@ -444,7 +448,7 @@ function EditPlanCard({
           <Text style={styles.inputLabel}>تعديل المدة والوقت</Text>
           <View style={styles.boundsRow}>
             <TextInput value={dailyMinutes} onChangeText={onDailyMinutesChange} placeholder="دقيقة يوميًا" placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
-            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder="عدد الأيام" placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={2} />
+            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder="عدد الأيام" placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
           </View>
           <PlanAction label="حفظ المدة والوقت" icon="schedule" variant="soft" loading={boundsPending} disabled={!Number.isInteger(Number(dailyMinutes)) || !Number.isInteger(Number(durationDays))} onPress={onSaveBounds} />
           <Text style={styles.inputLabel}>عدّل تنويع المهام أو شدتها</Text>
@@ -576,6 +580,7 @@ function formatStudyTime(minutes: number) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: { paddingBottom: 42, gap: 22 },
   hero: { height: 272, overflow: "hidden", position: "relative", justifyContent: "space-between", paddingHorizontal: 22, paddingTop: 14, paddingBottom: 29 },
   heroIllustration: { ...StyleSheet.absoluteFillObject, opacity: 0.98 },

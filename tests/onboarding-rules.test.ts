@@ -9,7 +9,7 @@ describe("goal onboarding rules", () => {
     expect(ONBOARDING_STEPS).toBe(4);
   });
 
-  it("uses the existing title, time, and duration bounds", () => {
+  it("uses the title, time, and 150-day duration bounds", () => {
     expect(isGoalTitleValid("ab")).toBe(false);
     expect(isGoalTitleValid("هدف صالح")).toBe(true);
     expect(isDailyMinutesValid("29")).toBe(false);
@@ -18,14 +18,15 @@ describe("goal onboarding rules", () => {
     expect(isDailyMinutesValid("481")).toBe(false);
     expect(isDurationDaysValid("0")).toBe(false);
     expect(isDurationDaysValid("90")).toBe(true);
-    expect(isDurationDaysValid("91")).toBe(false);
+    expect(isDurationDaysValid("150")).toBe(true);
+    expect(isDurationDaysValid("151")).toBe(false);
   });
 
   it("validates only the active step without needing a backend request", () => {
     expect(isOnboardingStepValid(1, { ...completeState, title: "" })).toBe(false);
     expect(isOnboardingStepValid(2, completeState)).toBe(true);
     expect(isOnboardingStepValid(3, { ...completeState, dailyMinutes: "10" })).toBe(false);
-    expect(isOnboardingStepValid(4, { ...completeState, targetDurationDays: "90" })).toBe(true);
+    expect(isOnboardingStepValid(4, { ...completeState, targetDurationDays: "150" })).toBe(true);
   });
 
   it("builds the established create-goal payload only when every value is valid", () => {

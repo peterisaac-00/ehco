@@ -19,7 +19,7 @@ export function isDailyMinutesValid(value: string) {
 
 export function isDurationDaysValid(value: string) {
   const days = Number(value);
-  return Number.isInteger(days) && days >= 1 && days <= 90;
+  return Number.isInteger(days) && days >= 1 && days <= 150;
 }
 
 export function isOnboardingStepValid(step: number, state: GoalOnboardingState) {

@@ -113,9 +113,9 @@ describe("learning plan rules", () => {
     expect(validateStudyBounds({ dailyMinutes: 5, durationDays: 30 }, 1_800)).toMatchObject({ valid: false });
   });
 
-  it("15. keeps hard study-workload limits deterministic for direct API validation", () => {
-    expect(() => calculateStudyBounds(43_201)).toThrow("حجم العمل التقديري للخطة غير صالح.");
-    expect(validateStudyBounds({ dailyMinutes: 480, durationDays: 90 }, 43_200)).toMatchObject({ valid: true });
+  it("15. keeps 150-day study-workload limits deterministic for direct API validation", () => {
+    expect(() => calculateStudyBounds(72_001)).toThrow("حجم العمل التقديري للخطة غير صالح.");
+    expect(validateStudyBounds({ dailyMinutes: 480, durationDays: 150 }, 72_000)).toMatchObject({ valid: true });
   });
 
   it("varies retry question and option order without exposing answer metadata", () => {
