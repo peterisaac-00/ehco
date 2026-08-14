@@ -25,3 +25,13 @@ The Manus-forwarded origin returned a valid Expo manifest, Android JavaScript bu
 The Expo/Metro health route was measured directly on 2026-08-14. Local HTTP, forwarded Manus HTTP, and forwarded Manus HTTPS each returned `200` with the exact body `packager-status:running`. Neither forwarded request returned a redirect. This rules out an HTTP-to-HTTPS redirect or altered `/status` response as the explanation for the Android message.
 
 For context, Expo documents historical Packager status failures at `https://github.com/expo/expo-cli/issues/52`; the documented failure condition is inability to reach `/status`, which was not observed here. Expo maintainers also identify device-to-host connectivity as the relevant boundary for the same message at `https://github.com/expo/expo/issues/8606`.
+
+## Published-case review
+
+Community reports commonly suggest tunnels, cache resets, LAN/firewall changes, or Expo Go reinstallations. The first three have already been tested or are inapplicable to the managed remote host. One remaining evidence-based possibility is SDK compatibility: the active Android manifest advertises `sdkVersion: 54.0.0` and `runtimeVersion: exposdk:54.0.0`, while the project installs `expo` 54.0.29. Expo's official Android guidance is to install the Expo Go build that matches the project's SDK from `https://expo.dev/go`, then restart the server. See `https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/` and `https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/`.
+
+The downloaded Stack Overflow case at `https://stackoverflow.com/questions/79332816/uncaught-error-java-io-ioexception-failed-to-download-remote-update` reports SDK mismatch as a successful remedy for a similar Android remote-update symptom. It is a candidate to verify on the device, not proof that it is the cause in Ehco.
+
+## WebSocket transport result
+
+On 2026-08-14, WebSocket upgrade requests to the forwarded Manus origin were tested on the Metro paths `/message`, `/hot?platform=android&dev=true`, and `/onchange`. Every path returned `502 Bad Gateway` over both HTTP and HTTPS. In contrast, the ordinary `/status` request returned `200` and `packager-status:running` over both protocols. This is a direct transport failure in the forwarded WebSocket path and matches the observed Expo Go behavior; it is not caused by any Ehco screen, API route, database operation, or Metro health endpoint.

@@ -85,3 +85,8 @@
 - [x] التحقق من أن رابط Manus الظاهر في Expo Go مصدره إعداد المنصة الحي وليس مرجعًا مدمجًا متوقفًا داخل شاشات Ehco.
 - [ ] فحص مسار /status عبر HTTP وHTTPS ومقارنة النص بفحص Packager المطلوب في Expo Go.
 - [x] فحص مسار /status عبر HTTP وHTTPS: أعاد كلاهما `200` و`packager-status:running` دون تحويل، فاستُبعدت فرضية اختلاف البروتوكول.
+- [ ] البحث في Reddit وStack Overflow عن حالات مماثلة لفشل Expo Go مع Packager متاح عبر البروكسي ومقارنة الحلول بالدليل الحالي.
+- [ ] فحص مسارات Manifest والحزمة وWebSocket بعد تأكيد وصول الهاتف إلى /status بنجاح.
+- [ ] التحقق من أن Expo Go المثبت على Android يدعم SDK 54 قبل تجربة أي تعديل آخر في الشبكة أو الكود.
+- [ ] اختبار WebSocket وEXPO_PACKAGER_PROXY_URL بعنوان HTTP صريح قبل اعتماد أو رفض فرضية النفق.
+- [x] اختبار WebSocket عبر `/message` و`/hot` و`/onchange`: أعادت جميعها 502 عبر HTTP وHTTPS، ما يثبت فشل طبقة البروكسي الحية.
