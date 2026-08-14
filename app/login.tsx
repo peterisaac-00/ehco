@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from "react-native";
 
-import { PrimaryButton } from "@/components/primary-button";
+import { AuthCard, AuthErrorMessage, AuthField, AuthHero, AuthSubmitButton, AuthSwitch, LifestyleDecoration, PasswordRule } from "@/components/auth/echo-auth-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import * as Auth from "@/lib/_core/auth";
 import { trpc } from "@/lib/trpc";
@@ -20,12 +20,14 @@ export default function LoginScreen() {
     await utils.invalidate();
     router.replace("/");
   };
-  const login = trpc.auth.login.useMutation({ onSuccess: completeAuth, onError: (error) => Alert.alert("تعذر تسجيل الدخول", error.message) });
-  const register = trpc.auth.register.useMutation({ onSuccess: completeAuth, onError: (error) => Alert.alert("تعذر إنشاء الحساب", error.message) });
+  const login = trpc.auth.login.useMutation({ onSuccess: completeAuth, onError: (error) => console.error("[Auth] login failed", error.message) });
+  const register = trpc.auth.register.useMutation({ onSuccess: completeAuth, onError: (error) => console.error("[Auth] registration failed", error.message) });
   const pending = login.isPending || register.isPending;
   const validUsername = /^[a-zA-Z0-9_]{3,32}$/.test(username.trim());
   const validPassword = password.length >= 8;
-  const canSubmit = validUsername && validPassword && (mode === "login" || password === confirmPassword);
+  const passwordMatches = password === confirmPassword;
+  const canSubmit = validUsername && validPassword && (mode === "login" || passwordMatches);
+  const activeError = mode === "login" ? login.error?.message : register.error?.message;
 
   const submit = () => {
     const input = { username: username.trim(), password };
@@ -33,21 +35,47 @@ export default function LoginScreen() {
     else login.mutate(input);
   };
 
+  const switchMode = () => {
+    setMode((current) => (current === "login" ? "register" : "login"));
+    setConfirmPassword("");
+  };
+
   return (
-    <ScreenContainer edges={["top", "bottom", "left", "right"]} className="px-5">
+    <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.brand}><Text style={styles.eyebrow}>EHCO</Text><Text style={styles.title}>{mode === "login" ? "مرحبًا بعودتك" : "أنشئ حسابك"}</Text><Text style={styles.copy}>{mode === "login" ? "اكتب اسم المستخدم وكلمة المرور للمتابعة." : "لن تحتاج Google أو أي تسجيل خارجي."}</Text></View>
-          <View style={styles.card}>
-            <Text style={styles.label}>اسم المستخدم</Text>
-            <TextInput autoCapitalize="none" autoCorrect={false} value={username} onChangeText={setUsername} placeholder="مثال: peter_01" placeholderTextColor="#94A3B8" style={styles.input} returnKeyType="next" maxLength={32} />
-            <Text style={styles.help}>حروف إنجليزية أو أرقام أو _، من 3 إلى 32 حرفًا.</Text>
-            <Text style={styles.label}>كلمة المرور</Text>
-            <TextInput secureTextEntry value={password} onChangeText={setPassword} placeholder="ثمانية أحرف على الأقل" placeholderTextColor="#94A3B8" style={styles.input} returnKeyType={mode === "register" ? "next" : "done"} maxLength={128} onSubmitEditing={mode === "login" && canSubmit ? submit : undefined} />
-            {mode === "register" && <><Text style={styles.label}>تأكيد كلمة المرور</Text><TextInput secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} placeholder="أعد كتابة كلمة المرور" placeholderTextColor="#94A3B8" style={styles.input} returnKeyType="done" maxLength={128} onSubmitEditing={canSubmit ? submit : undefined} />{confirmPassword.length > 0 && password !== confirmPassword && <Text style={styles.error}>كلمتا المرور غير متطابقتين.</Text>}</>}
-            <PrimaryButton label={mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب والبدء"} onPress={submit} disabled={!canSubmit} loading={pending} />
-          </View>
-          <View style={styles.switchRow}><Text style={styles.switchCopy}>{mode === "login" ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}</Text><Text onPress={() => { setMode(mode === "login" ? "register" : "login"); setConfirmPassword(""); }} style={styles.switchAction}>{mode === "login" ? "إنشاء حساب" : "تسجيل الدخول"}</Text></View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <AuthHero mode={mode} />
+          <AuthCard>
+            <AuthField
+              icon="person-outline"
+              label="اسم المستخدم"
+              value={username}
+              onChangeText={setUsername}
+              placeholder="مثال: peter_01"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+              maxLength={32}
+              help="حروف إنجليزية أو أرقام أو _، من 3 إلى 32 حرفًا."
+              error={username.length > 0 && !validUsername ? "تحقق من صيغة اسم المستخدم." : undefined}
+            />
+            <AuthField
+              icon="lock-outline"
+              label="كلمة المرور"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="ثمانية أحرف على الأقل"
+              secureTextEntry
+              returnKeyType={mode === "register" ? "next" : "done"}
+              maxLength={128}
+              onSubmitEditing={mode === "login" && canSubmit ? submit : undefined}
+            />
+            {mode === "register" && <><PasswordRule /><AuthField icon="lock-outline" label="تأكيد كلمة المرور" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="أعد كتابة كلمة المرور" secureTextEntry returnKeyType="done" maxLength={128} onSubmitEditing={canSubmit ? submit : undefined} error={confirmPassword.length > 0 && !passwordMatches ? "كلمتا المرور غير متطابقتين." : undefined} /></>}
+            {activeError ? <AuthErrorMessage message={activeError} /> : null}
+            <AuthSubmitButton label={mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب والبدء"} onPress={submit} disabled={!canSubmit} loading={pending} />
+            <AuthSwitch mode={mode} onPress={switchMode} />
+          </AuthCard>
+          <LifestyleDecoration />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -56,17 +84,5 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: "center", gap: 20, paddingVertical: 24 },
-  brand: { gap: 7, alignItems: "flex-end" },
-  eyebrow: { color: "#4F46E5", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
-  title: { color: "#0F172A", fontSize: 31, fontWeight: "800", textAlign: "right" },
-  copy: { color: "#64748B", fontSize: 15, lineHeight: 23, textAlign: "right" },
-  card: { gap: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 22, padding: 18 },
-  label: { color: "#0F172A", fontSize: 14, fontWeight: "800", textAlign: "right", marginTop: 2 },
-  input: { minHeight: 50, borderColor: "#CBD5E1", borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, color: "#0F172A", fontSize: 16, textAlign: "left", backgroundColor: "#F8FAFC" },
-  help: { color: "#64748B", fontSize: 12, textAlign: "right", marginBottom: 4 },
-  error: { color: "#E11D48", fontSize: 12, textAlign: "right" },
-  switchRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 6 },
-  switchCopy: { color: "#64748B", fontSize: 14 },
-  switchAction: { color: "#4338CA", fontSize: 14, fontWeight: "800" },
+  content: { flexGrow: 1, paddingBottom: 0, gap: 18 },
 });
