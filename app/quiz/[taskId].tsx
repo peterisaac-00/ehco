@@ -1,9 +1,10 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { QuizLifestyleScene, QuizScoreRing } from "@/components/quiz/quiz-visuals";
 import { trpc } from "@/lib/trpc";
 
 type QuizOutcome = {
@@ -36,6 +37,8 @@ export default function QuizScreen() {
   const taskId = Number(params.taskId);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<QuizOutcome | null>(null);
+  const entrance = useRef(new Animated.Value(0)).current;
+  const progressAnimation = useRef(new Animated.Value(0)).current;
   const utils = trpc.useUtils();
   const beginQuiz = trpc.tasks.beginQuiz.useMutation({ onError: (error) => Alert.alert("تعذر فتح الاختبار", error.message) });
   const submitQuiz = trpc.tasks.submitQuiz.useMutation({
@@ -62,6 +65,15 @@ export default function QuizScreen() {
   const answeredCount = useMemo(() => questions.filter((question) => answers[question.id]).length, [answers, questions]);
   const completed = questions.length > 0 && answeredCount === questions.length;
   const progressRatio = questions.length > 0 ? answeredCount / questions.length : 0;
+
+  useEffect(() => {
+    entrance.setValue(0);
+    Animated.timing(entrance, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+  }, [entrance]);
+
+  useEffect(() => {
+    Animated.timing(progressAnimation, { toValue: progressRatio, duration: 240, useNativeDriver: false }).start();
+  }, [progressAnimation, progressRatio]);
 
   const submit = () => submitQuiz.mutate({ taskId, answers: questions.map((question) => ({ questionId: question.id, optionId: answers[question.id] })) });
   const retry = () => {
@@ -94,12 +106,15 @@ export default function QuizScreen() {
     );
   }
 
+  const animatedProgressWidth = progressAnimation.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* Header */}
-          <View style={styles.header}>
+          <Animated.View style={[styles.header, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+            <QuizLifestyleScene compact />
             <View style={styles.eyebrowRow}>
               <Text style={styles.eyebrow}>اختبار قصير</Text>
               <View style={styles.badgeWrap}><Text style={styles.badgeText}>{questions.length} أسئلة</Text></View>
@@ -114,16 +129,16 @@ export default function QuizScreen() {
                 <Text style={styles.progressCount}>{answeredCount} / {questions.length}</Text>
               </View>
               <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: `${progressRatio * 100}%` }]} />
+                <Animated.View style={[styles.progressBarFill, { width: animatedProgressWidth }]} />
               </View>
             </View>
-          </View>
+          </Animated.View>
 
           {/* Question cards */}
           {questions.map((question, index) => {
             const hasAnswered = Boolean(answers[question.id]);
             return (
-              <View key={question.id} style={[styles.questionCard, hasAnswered && styles.questionCardAnswered]}>
+              <Animated.View key={question.id} style={[styles.questionCard, hasAnswered && styles.questionCardAnswered, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [16 + index * 4, 0] }) }] }]}>
                 <View style={styles.questionHeading}>
                   <View style={styles.questionBadge}><Text style={styles.questionBadgeText}>{String(index + 1).padStart(2, "0")}</Text></View>
                   <Text style={styles.prompt}>{question.prompt}</Text>
@@ -136,6 +151,7 @@ export default function QuizScreen() {
                         key={option.id}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
+                        accessibilityLabel={`السؤال ${index + 1}: ${option.text}`}
                         onPress={() => setAnswers((current) => ({ ...current, [question.id]: option.id }))}
                         style={({ pressed }) => [styles.option, selected && styles.optionSelected, pressed && styles.optionPressed]}
                       >
@@ -147,7 +163,7 @@ export default function QuizScreen() {
                     );
                   })}
                 </View>
-              </View>
+              </Animated.View>
             );
           })}
         </ScrollView>
@@ -190,12 +206,13 @@ function QuizResult({ outcome, onRetry, onRetrySegment, retryingSegment }: { out
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
       <ScrollView contentContainerStyle={styles.resultContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.resultScene}><QuizLifestyleScene /></View>
         <View style={styles.resultCard}>
           <View style={[styles.resultIconWrap, success ? styles.successIconWrap : styles.failIconWrap]}>
             <MaterialIcons name={success ? "verified" : "replay"} size={42} color={success ? COLORS.success : "#B45309"} />
           </View>
           <Text style={styles.resultEyebrow}>{success ? "أحسنت!" : "تحتاج محاولة أخرى"}</Text>
-          <Text style={styles.scoreText}>{outcome.score}%</Text>
+          <QuizScoreRing score={outcome.score} />
           <Text style={styles.resultTitle}>{success ? "نجحت في الاختبار بنجاح" : "لم تصل إلى نسبة النجاح المطلوبة"}</Text>
           <Text style={styles.resultCopy}>
             {success
@@ -229,8 +246,8 @@ function QuizResult({ outcome, onRetry, onRetrySegment, retryingSegment }: { out
                 <Text style={styles.primaryActionText}>إعادة الاختبار</Text>
               </Pressable>
             )}
-            <Pressable accessibilityRole="button" onPress={() => router.replace("/(tabs)/plan")} style={({ pressed }) => [styles.actionButton, styles.secondaryAction, pressed && styles.pressed]}>
-              <Text style={styles.secondaryActionText}>العودة إلى الخطة</Text>
+            <Pressable accessibilityRole="button" onPress={() => router.replace("/")} style={({ pressed }) => [styles.actionButton, styles.secondaryAction, pressed && styles.pressed]}>
+              <Text style={styles.secondaryActionText}>العودة إلى الرئيسية</Text>
             </Pressable>
           </View>
         </View>
@@ -285,7 +302,6 @@ const styles = StyleSheet.create({
   successIconWrap: { backgroundColor: COLORS.successBg },
   failIconWrap: { backgroundColor: "#FEF3C7" },
   resultEyebrow: { color: COLORS.forestMuted, fontSize: 15, fontWeight: "700" },
-  scoreText: { color: COLORS.forest, fontSize: 48, fontWeight: "800" },
   resultTitle: { color: COLORS.forest, fontSize: 20, fontWeight: "800", textAlign: "center" },
   resultCopy: { color: COLORS.forestMuted, fontSize: 15, lineHeight: 22, textAlign: "center", maxWidth: 290 },
   noteBox: { flexDirection: "row-reverse", alignItems: "center", gap: 8, backgroundColor: COLORS.successBg, borderWidth: 1, borderColor: "#D0E2C8", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
@@ -293,6 +309,7 @@ const styles = StyleSheet.create({
   noteText: { color: COLORS.forest, fontSize: 13, fontWeight: "700", textAlign: "right" },
   failNoteText: { color: "#92400E" },
   resultActions: { alignSelf: "stretch", gap: 10, marginTop: 4 },
+  resultScene: { width: "100%", paddingHorizontal: 4, paddingBottom: 4 },
   actionButton: { minHeight: 54, borderRadius: 16, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8 },
   primaryAction: { backgroundColor: COLORS.forest },
   primaryActionText: { color: COLORS.ivory, fontSize: 15, fontWeight: "800" },

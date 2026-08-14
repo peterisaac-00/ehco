@@ -52,4 +52,12 @@ describe("daily task-aware reminder", () => {
     await disableDailyReminder();
     expect(await isDailyReminderEnabled()).toBe(false);
   });
+
+  it("returns a safe denied state if notifications are unavailable in the runtime", async () => {
+    notifications.getPermissionsAsync.mockRejectedValueOnce(new Error("Notifications unavailable"));
+
+    await expect(enableDailyReminder("مراجعة الجبر")).resolves.toBe("denied");
+    expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(await isDailyReminderEnabled()).toBe(false);
+  });
 });
