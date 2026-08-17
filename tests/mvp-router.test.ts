@@ -17,8 +17,9 @@ const db = vi.hoisted(() => ({
   getFailedPlanSegments: vi.fn(),
   getUserLanguage: vi.fn().mockResolvedValue("ar"),
   setUserLanguage: vi.fn().mockImplementation(async (_userId: number, language: "ar" | "en") => language),
-  getActivePlanLanguageSnapshot: vi.fn().mockResolvedValue(null),
-  replacePlanLocalizedContent: vi.fn(),
+  getActivePlanLocalizationSnapshot: vi.fn().mockResolvedValue(null),
+  getPlanLocalizationLanguages: vi.fn().mockResolvedValue([]),
+  getLocalizedPlanForGoal: vi.fn(),
 }));
 
 const ai = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const ai = vi.hoisted(() => ({
   regeneratePlanOutlineForBounds: vi.fn(),
   generatePlanOutline: vi.fn(),
   revisePlanOutline: vi.fn(),
+  translatePlanSegment: vi.fn(),
 }));
 
 vi.mock("../server/db", () => {
@@ -157,7 +159,7 @@ describe("MVP router business rules", () => {
   it("stores and returns the account language preference", async () => {
     db.getUserLanguage.mockResolvedValue("ar");
     await expect(callerFor().preferences.language()).resolves.toBe("ar");
-    await expect(callerFor().preferences.setLanguage("en")).resolves.toEqual({ language: "en", synchronized: false });
+    await expect(callerFor().preferences.setLanguage("en")).resolves.toEqual({ language: "en", localized: false });
     expect(db.setUserLanguage).toHaveBeenCalledWith(1, "en");
   });
 

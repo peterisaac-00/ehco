@@ -266,6 +266,46 @@ export async function generatePlanSegment(input: {
   return segment;
 }
 
+/** Translates an existing outline without allowing Gemini to redesign its structure. */
+export async function translatePlanOutline(input: {
+  source: LearningPlanOutline;
+  targetLanguage: ContentLanguage;
+}): Promise<LearningPlanOutline> {
+  const targetLanguageName = input.targetLanguage === "ar" ? "Arabic" : "English";
+  const response = await invokeLLM({
+    model: LEARNING_MODEL,
+    maxTokens: 16_384,
+    outputSchema: outlineOutputSchema,
+    messages: [
+      { role: "system", content: `You are a precise educational-content translator. Translate every text field of the supplied study-plan outline into ${targetLanguageName}. Do not redesign, summarize, add, remove, reorder, or reinterpret any learning content. Preserve totalDurationDays, dailyMinutes, each dayNumber, and the exact array order. Return only the required JSON object.` },
+      { role: "user", content: JSON.stringify({ sourceOutline: input.source }) },
+    ],
+  });
+  const translated = parseOutlineWithoutGoal(response.choices[0]?.message.content, response.choices[0]?.finish_reason);
+  assertOutlineIdentity(input.source, translated);
+  return translated;
+}
+
+/** Translates generated tasks and quizzes while preserving ids, answers, order, and time budgets. */
+export async function translatePlanSegment(input: {
+  source: LearningPlanSegment;
+  targetLanguage: ContentLanguage;
+}): Promise<LearningPlanSegment> {
+  const targetLanguageName = input.targetLanguage === "ar" ? "Arabic" : "English";
+  const response = await invokeLLM({
+    model: LEARNING_MODEL,
+    maxTokens: 16_384,
+    outputSchema: segmentOutputSchema,
+    messages: [
+      { role: "system", content: `You are a precise educational-content translator. Translate only learner-visible text in the supplied task segment into ${targetLanguageName}: day titles, task titles, task descriptions, quiz prompts, option text, and explanations. Never create, remove, reorder, or rewrite learning activities or questions. Preserve exactly: startDay, endDay, every dayNumber, every orderIndex, every estimatedMinutes value, all question ids, all option ids, all answerId values, and every array order. Return only the required JSON object.` },
+      { role: "user", content: JSON.stringify({ sourceSegment: input.source }) },
+    ],
+  });
+  const translated = parseSegment(response.choices[0]?.message.content, input.source.startDay, input.source.endDay, response.choices[0]?.finish_reason);
+  assertSegmentIdentity(input.source, translated);
+  return translated;
+}
+
 function responseText(content: string | unknown[] | undefined, finishReason?: string | null) {
   if (finishReason === "length") throw new Error("توقفت استجابة Gemini قبل اكتمال الخطة. أعد المحاولة؛ سيستخدم التطبيق دفعة أصغر.");
   if (typeof content !== "string" || content.trim().length === 0) throw new Error("لم يَعُد Gemini نتيجة صالحة للخطة.");
@@ -281,6 +321,12 @@ function parseOutline(content: string | unknown[] | undefined, goal: GoalContext
   return parsed.data;
 }
 
+function parseOutlineWithoutGoal(content: string | unknown[] | undefined, finishReason?: string | null) {
+  const parsed = planOutlineSchema.safeParse(parseJson(content, finishReason));
+  if (!parsed.success) throw new Error("النسخة المترجمة من الخطة لا تطابق المواصفات المطلوبة.");
+  return parsed.data;
+}
+
 function parseCurriculumBlueprint(content: string | unknown[] | undefined, finishReason?: string | null) {
   const parsed = curriculumBlueprintSchema.safeParse(parseJson(content, finishReason));
   if (!parsed.success) throw new Error("المواصفات التعليمية الناتجة لا تطابق متطلبات الخطة.");
@@ -292,6 +338,44 @@ function parseSegment(content: string | unknown[] | undefined, startDay: number,
   if (!parsed.success) throw new Error("تفاصيل الخطة الناتجة لا تطابق المواصفات المطلوبة.");
   if (parsed.data.startDay !== startDay || parsed.data.endDay !== endDay) throw new Error("تفاصيل الخطة لا تطابق نطاق الأيام المطلوب.");
   return parsed.data;
+}
+
+function assertOutlineIdentity(source: LearningPlanOutline, translated: LearningPlanOutline) {
+  if (source.totalDurationDays !== translated.totalDurationDays || source.dailyMinutes !== translated.dailyMinutes || source.days.length !== translated.days.length) {
+    throw new Error("النسخة المترجمة غيّرت بنية الخطة الأساسية.");
+  }
+  for (const [index, sourceDay] of source.days.entries()) {
+    if (translated.days[index]?.dayNumber !== sourceDay.dayNumber) {
+      throw new Error("النسخة المترجمة غيّرت ترتيب أيام الخطة.");
+    }
+  }
+}
+
+function assertSegmentIdentity(source: LearningPlanSegment, translated: LearningPlanSegment) {
+  if (source.startDay !== translated.startDay || source.endDay !== translated.endDay || source.days.length !== translated.days.length) {
+    throw new Error("النسخة المترجمة غيّرت نطاق المهام.");
+  }
+  for (const [dayIndex, sourceDay] of source.days.entries()) {
+    const translatedDay = translated.days[dayIndex];
+    if (!translatedDay || translatedDay.dayNumber !== sourceDay.dayNumber || translatedDay.tasks.length !== sourceDay.tasks.length) {
+      throw new Error("النسخة المترجمة غيّرت ترتيب مهام الخطة.");
+    }
+    for (const [taskIndex, sourceTask] of sourceDay.tasks.entries()) {
+      const translatedTask = translatedDay.tasks[taskIndex];
+      if (!translatedTask || translatedTask.orderIndex !== sourceTask.orderIndex || translatedTask.estimatedMinutes !== sourceTask.estimatedMinutes || translatedTask.quizQuestions.length !== sourceTask.quizQuestions.length) {
+        throw new Error("النسخة المترجمة غيّرت بنية المهمة.");
+      }
+      for (const [questionIndex, sourceQuestion] of sourceTask.quizQuestions.entries()) {
+        const translatedQuestion = translatedTask.quizQuestions[questionIndex];
+        if (!translatedQuestion || translatedQuestion.id !== sourceQuestion.id || translatedQuestion.answerId !== sourceQuestion.answerId || translatedQuestion.options.length !== sourceQuestion.options.length) {
+          throw new Error("النسخة المترجمة غيّرت بنية سؤال الاختبار.");
+        }
+        if (translatedQuestion.options.some((option, optionIndex) => option.id !== sourceQuestion.options[optionIndex]?.id)) {
+          throw new Error("النسخة المترجمة غيّرت معرّفات اختيارات الاختبار.");
+        }
+      }
+    }
+  }
 }
 
 function parseEditDecision(value: unknown): { decision: "accepted" | "rejected"; reason: string; outline: unknown } | null {

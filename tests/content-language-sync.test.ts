@@ -1,71 +1,99 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getActivePlanLanguageSnapshot: vi.fn(),
+  getActivePlanLocalizationSnapshot: vi.fn(),
+  getUserLanguage: vi.fn(),
   setUserLanguage: vi.fn(),
-  replacePlanLocalizedContent: vi.fn(),
-  generateCurriculumBlueprint: vi.fn(),
-  generatePlanOutline: vi.fn(),
-  generatePlanSegment: vi.fn(),
-  LearningStateError: class MockLearningStateError extends Error {},
+  savePlanLocalization: vi.fn(),
+  translatePlanOutline: vi.fn(),
+  translatePlanSegment: vi.fn(),
 }));
 
 vi.mock("../server/db", () => ({
-  getActivePlanLanguageSnapshot: mocks.getActivePlanLanguageSnapshot,
+  getActivePlanLocalizationSnapshot: mocks.getActivePlanLocalizationSnapshot,
+  getUserLanguage: mocks.getUserLanguage,
   setUserLanguage: mocks.setUserLanguage,
-  replacePlanLocalizedContent: mocks.replacePlanLocalizedContent,
-  LearningStateError: mocks.LearningStateError,
+  savePlanLocalization: mocks.savePlanLocalization,
 }));
 
 vi.mock("../server/learning-ai", () => ({
   LEARNING_MODEL: "gemini-test",
-  PROMPT_VERSION: "language-sync-test",
-  generateCurriculumBlueprint: mocks.generateCurriculumBlueprint,
-  generatePlanOutline: mocks.generatePlanOutline,
-  generatePlanSegment: mocks.generatePlanSegment,
+  PROMPT_VERSION: "localized-copy-test",
+  translatePlanOutline: mocks.translatePlanOutline,
+  translatePlanSegment: mocks.translatePlanSegment,
 }));
 
 import { synchronizeActivePlanLanguage } from "../server/content-language-sync";
 
-const outline = { title: "English outline", summary: "summary", totalDurationDays: 2, dailyMinutes: 30, days: [{ dayNumber: 1, title: "Day 1", focus: "focus" }, { dayNumber: 2, title: "Day 2", focus: "focus" }] };
-const segment = { startDay: 1, endDay: 2, days: [{ dayNumber: 1, title: "Day 1", tasks: [{ orderIndex: 1, title: "Task", description: "Description", estimatedMinutes: 30, quizQuestions: [{ id: "q1", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }, { id: "q2", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }, { id: "q3", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }] }] }, { dayNumber: 2, title: "Day 2", tasks: [{ orderIndex: 1, title: "Task", description: "Description", estimatedMinutes: 30, quizQuestions: [{ id: "q4", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }, { id: "q5", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }, { id: "q6", prompt: "Question", options: [{ id: "a", text: "A" }, { id: "b", text: "B" }], answerId: "a", explanation: "Explanation" }] }] }] };
-const blueprint = { domain: "language", learnerStartingPoint: "beginner", targetCapabilities: ["communicate"], progressionPrinciples: ["sequence"], practiceApproach: ["practice"], reviewStrategy: "review", assessmentApproach: "assessment", pacingGuidance: "pace", avoid: ["overload"] };
+const arabicOutline = {
+  title: "خطة التحقق", summary: "ملخص", totalDurationDays: 1, dailyMinutes: 30,
+  days: [{ dayNumber: 1, title: "اليوم الأول", focus: "تدريب" }],
+};
+const englishOutline = {
+  title: "Verification plan", summary: "Summary", totalDurationDays: 1, dailyMinutes: 30,
+  days: [{ dayNumber: 1, title: "Day one", focus: "Practice" }],
+};
+const arabicSegment = {
+  startDay: 1, endDay: 1, days: [{ dayNumber: 1, title: "اليوم الأول", tasks: [{
+    orderIndex: 1, title: "مهمة", description: "وصف", estimatedMinutes: 30,
+    quizQuestions: ["q1", "q2", "q3"].map((id) => ({ id, prompt: "سؤال", options: [{ id: "a", text: "صحيح" }, { id: "b", text: "خطأ" }], answerId: "a", explanation: "شرح" })),
+  }] }],
+};
+const englishSegment = {
+  ...arabicSegment,
+  days: [{ ...arabicSegment.days[0], title: "Day one", tasks: [{ ...arabicSegment.days[0].tasks[0], title: "Task", description: "Description", quizQuestions: arabicSegment.days[0].tasks[0].quizQuestions.map((question) => ({ ...question, prompt: "Question", options: [{ id: "a", text: "Correct" }, { id: "b", text: "Wrong" }], explanation: "Explanation" })) }] }],
+};
 
 describe("content language synchronization", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.getActivePlanLanguageSnapshot.mockResolvedValue({
-      plan: { id: 44, contentLanguage: "ar" },
-      goal: { title: "تعلم الإنجليزية", currentLevel: "beginner", dailyMinutes: 30, targetDurationDays: 2 },
-      generatedSegments: [{ startDay: 1, endDay: 2 }],
-      hasActiveQuiz: false,
+    mocks.getActivePlanLocalizationSnapshot.mockResolvedValue({
+      plan: { id: 44, contentLanguage: "ar", draftJson: arabicOutline },
+      generatedSegments: [{ startDay: 1, endDay: 1, detailJson: arabicSegment }],
+      localization: null,
     });
-    mocks.generateCurriculumBlueprint.mockResolvedValue(blueprint);
-    mocks.generatePlanOutline.mockResolvedValue(outline);
-    mocks.generatePlanSegment.mockResolvedValue(segment);
-    mocks.replacePlanLocalizedContent.mockResolvedValue(undefined);
+    mocks.getUserLanguage.mockResolvedValue("ar");
+    mocks.translatePlanOutline.mockResolvedValue(englishOutline);
+    mocks.translatePlanSegment.mockResolvedValue(englishSegment);
+    mocks.savePlanLocalization.mockResolvedValue(undefined);
     mocks.setUserLanguage.mockResolvedValue("en");
   });
 
-  it("rebuilds the outline, tasks, and quiz questions in the selected language before persisting it", async () => {
-    await expect(synchronizeActivePlanLanguage(7, "en")).resolves.toEqual({ language: "en", synchronized: true });
-    expect(mocks.generateCurriculumBlueprint).toHaveBeenCalledWith(expect.objectContaining({ language: "en" }));
-    expect(mocks.generatePlanOutline).toHaveBeenCalledWith(expect.objectContaining({ language: "en" }), blueprint);
-    expect(mocks.generatePlanSegment).toHaveBeenCalledWith(expect.objectContaining({ goal: expect.objectContaining({ language: "en" }) }));
-    expect(mocks.replacePlanLocalizedContent).toHaveBeenCalledWith(expect.objectContaining({ language: "en", outline, generatedSegments: [segment] }));
+  it("creates one cached language view while preserving segment structure and answer ids", async () => {
+    await expect(synchronizeActivePlanLanguage(7, "en")).resolves.toEqual({ language: "en", localized: true });
+    expect(mocks.translatePlanOutline).toHaveBeenCalledWith({ source: arabicOutline, targetLanguage: "en" });
+    expect(mocks.translatePlanSegment).toHaveBeenCalledWith({ source: arabicSegment, targetLanguage: "en" });
+    expect(mocks.savePlanLocalization).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 7, planId: 44, language: "en", outline: englishOutline, segments: [englishSegment],
+    }));
+    expect(englishSegment.days[0].tasks[0].quizQuestions.map((question) => [question.id, question.answerId, question.options.map((option) => option.id)]))
+      .toEqual(arabicSegment.days[0].tasks[0].quizQuestions.map((question) => [question.id, question.answerId, question.options.map((option) => option.id)]));
     expect(mocks.setUserLanguage).toHaveBeenCalledWith(7, "en");
   });
 
-  it("does not switch language while a quiz is in progress", async () => {
-    mocks.getActivePlanLanguageSnapshot.mockResolvedValueOnce({ plan: { id: 44, contentLanguage: "ar" }, goal: {}, generatedSegments: [], hasActiveQuiz: true });
-    await expect(synchronizeActivePlanLanguage(7, "en")).rejects.toBeInstanceOf(mocks.LearningStateError);
-    expect(mocks.setUserLanguage).not.toHaveBeenCalled();
+  it("switches instantly when the requested language was already cached", async () => {
+    mocks.getActivePlanLocalizationSnapshot.mockResolvedValueOnce({
+      plan: { id: 44, contentLanguage: "ar", draftJson: arabicOutline }, generatedSegments: [], localization: { id: 3 },
+    });
+    await expect(synchronizeActivePlanLanguage(7, "en")).resolves.toEqual({ language: "en", localized: false });
+    expect(mocks.translatePlanOutline).not.toHaveBeenCalled();
+    expect(mocks.setUserLanguage).toHaveBeenCalledWith(7, "en");
   });
 
-  it("persists the preference without another generation when content already matches", async () => {
-    mocks.getActivePlanLanguageSnapshot.mockResolvedValueOnce({ plan: { id: 44, contentLanguage: "en" }, goal: {}, generatedSegments: [], hasActiveQuiz: false });
-    await expect(synchronizeActivePlanLanguage(7, "en")).resolves.toEqual({ language: "en", synchronized: false });
-    expect(mocks.generatePlanOutline).not.toHaveBeenCalled();
+  it("changes the interface language without translation when it already matches the source plan", async () => {
+    await expect(synchronizeActivePlanLanguage(7, "ar")).resolves.toEqual({ language: "ar", localized: false });
+    expect(mocks.translatePlanOutline).not.toHaveBeenCalled();
+    expect(mocks.setUserLanguage).toHaveBeenCalledWith(7, "ar");
+  });
+
+  it("does not block an active quiz because grading uses immutable question and answer ids", async () => {
+    mocks.getActivePlanLocalizationSnapshot.mockResolvedValueOnce({
+      plan: { id: 44, contentLanguage: "ar", draftJson: arabicOutline },
+      generatedSegments: [{ startDay: 1, endDay: 1, detailJson: arabicSegment }],
+      localization: null,
+      hasActiveQuiz: true,
+    });
+    await expect(synchronizeActivePlanLanguage(7, "en")).resolves.toEqual({ language: "en", localized: true });
     expect(mocks.setUserLanguage).toHaveBeenCalledWith(7, "en");
   });
 });

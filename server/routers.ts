@@ -3,7 +3,7 @@ import { contentLanguageSchema, createGoalInputSchema, planBoundsInputSchema, pl
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { generateCurriculumBlueprint, generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline } from "./learning-ai";
+import { generateCurriculumBlueprint, generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline, translatePlanSegment } from "./learning-ai";
 import { synchronizeActivePlanLanguage } from "./content-language-sync";
 import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
@@ -36,7 +36,7 @@ function requestIdentity(req: { ip?: string; headers: Record<string, string | st
 async function preparePlanSegment(userId: number, planId: number, startDay: number) {
   const reservation = await learningDb.reserveSegmentGeneration(userId, planId, startDay);
   if (reservation.state === "generated") return { alreadyGenerated: true, startDay: reservation.segment.startDay };
-  const language = await learningDb.getUserLanguage(userId);
+  const language = reservation.plan.contentLanguage ?? await learningDb.getUserLanguage(userId);
   const segment = await generatePlanSegment({
     goal: { ...reservation.goal, language },
     outline: reservation.plan.draftJson,
@@ -45,6 +45,11 @@ async function preparePlanSegment(userId: number, planId: number, startDay: numb
     endDay: reservation.segment.endDay,
   });
   await learningDb.savePlanSegment({ userId, planId, segment });
+  const cachedLanguages = await learningDb.getPlanLocalizationLanguages(planId);
+  await Promise.all(cachedLanguages.map(async (localizedLanguage) => {
+    const localizedSegment = await translatePlanSegment({ source: segment, targetLanguage: localizedLanguage });
+    await learningDb.appendPlanLocalizationSegment({ userId, planId, language: localizedLanguage, segment: localizedSegment });
+  }));
   return { alreadyGenerated: false, startDay: reservation.segment.startDay };
 }
 
@@ -110,7 +115,8 @@ export const appRouter = router({
   }),
   plans: router({
     getForGoal: protectedProcedure.input(goalIdSchema).query(async ({ ctx, input }) => {
-      const plan = await learningDb.getPlanForGoal(ctx.user.id, input.goalId);
+      const language = await learningDb.getUserLanguage(ctx.user.id);
+      const plan = await learningDb.getLocalizedPlanForGoal(ctx.user.id, input.goalId, language);
       return plan?.plan ?? null;
     }),
     approve: protectedProcedure.input(goalIdSchema).mutation(async ({ ctx, input }) => {

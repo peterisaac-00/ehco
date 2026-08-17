@@ -5,6 +5,7 @@ import {
   goals,
   localCredentials,
   planEditRequests,
+  planLocalizations,
   planSegments,
   plans,
   quizAttempts,
@@ -178,6 +179,13 @@ export async function getPlanForGoal(userId: number, goalId: number) {
   return result[0] ?? null;
 }
 
+export async function getLocalizedPlanForGoal(userId: number, goalId: number, language: ContentLanguage) {
+  const record = await getPlanForGoal(userId, goalId);
+  if (!record) return null;
+  const localization = await getPlanLocalization(record.plan.id, language);
+  return localization ? { ...record, plan: { ...record.plan, draftJson: localization.outlineJson } } : record;
+}
+
 export async function getPlanById(userId: number, planId: number) {
   const db = await requireDb();
   const result = await db.select({ plan: plans, goal: goals }).from(plans)
@@ -185,6 +193,96 @@ export async function getPlanById(userId: number, planId: number) {
     .where(and(eq(plans.id, planId), eq(goals.userId, userId)))
     .limit(1);
   return result[0] ?? null;
+}
+
+export async function getPlanLocalization(planId: number, language: ContentLanguage) {
+  const db = await requireDb();
+  const rows = await db.select().from(planLocalizations)
+    .where(and(eq(planLocalizations.planId, planId), eq(planLocalizations.language, language)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getPlanLocalizationLanguages(planId: number): Promise<ContentLanguage[]> {
+  const db = await requireDb();
+  const rows = await db.select({ language: planLocalizations.language }).from(planLocalizations)
+    .where(eq(planLocalizations.planId, planId));
+  return rows.map((row) => row.language);
+}
+
+/** Captures canonical source content plus an already-cached target localization, if any. */
+export async function getActivePlanLocalizationSnapshot(userId: number, targetLanguage: ContentLanguage) {
+  const activeGoal = await getActiveGoal(userId);
+  if (!activeGoal) return null;
+  const record = await getPlanForGoal(userId, activeGoal.id);
+  if (!record) return null;
+  const db = await requireDb();
+  const generatedSegments = await db.select().from(planSegments)
+    .where(and(eq(planSegments.planId, record.plan.id), eq(planSegments.status, "generated")))
+    .orderBy(asc(planSegments.startDay));
+  const localization = await getPlanLocalization(record.plan.id, targetLanguage);
+  return { ...record, generatedSegments, localization };
+}
+
+/** Saves a cached learner-visible language view without touching canonical tasks, quizzes, or progress. */
+export async function savePlanLocalization(input: {
+  userId: number;
+  planId: number;
+  language: ContentLanguage;
+  outline: LearningPlanOutline;
+  segments: LearningPlanSegment[];
+  aiModel: string;
+  promptVersion: string;
+}) {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const owner = await tx.select({ id: plans.id }).from(plans)
+      .innerJoin(goals, eq(plans.goalId, goals.id))
+      .where(and(eq(plans.id, input.planId), eq(goals.userId, input.userId), eq(goals.status, "active")))
+      .limit(1);
+    if (!owner[0]) throw new LearningStateError("الخطة المطلوبة غير متاحة.");
+    await tx.insert(planLocalizations).values({
+      planId: input.planId,
+      language: input.language,
+      outlineJson: input.outline,
+      segmentsJson: input.segments,
+      aiModel: input.aiModel,
+      promptVersion: input.promptVersion,
+    }).onDuplicateKeyUpdate({
+      set: {
+        outlineJson: input.outline,
+        segmentsJson: input.segments,
+        aiModel: input.aiModel,
+        promptVersion: input.promptVersion,
+      },
+    });
+  });
+}
+
+/** Appends a newly generated canonical segment to every cached language view of a plan. */
+export async function appendPlanLocalizationSegment(input: {
+  userId: number;
+  planId: number;
+  language: ContentLanguage;
+  segment: LearningPlanSegment;
+}) {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const owner = await tx.select({ id: plans.id }).from(plans)
+      .innerJoin(goals, eq(plans.goalId, goals.id))
+      .where(and(eq(plans.id, input.planId), eq(goals.userId, input.userId)))
+      .limit(1);
+    if (!owner[0]) throw new LearningStateError("الخطة المطلوبة غير متاحة.");
+    const rows = await tx.select().from(planLocalizations)
+      .where(and(eq(planLocalizations.planId, input.planId), eq(planLocalizations.language, input.language)))
+      .limit(1);
+    const current = rows[0];
+    if (!current) return;
+    const segments = [...current.segmentsJson.filter((segment) => segment.startDay !== input.segment.startDay), input.segment]
+      .sort((left, right) => left.startDay - right.startDay);
+    await tx.update(planLocalizations).set({ segmentsJson: segments })
+      .where(eq(planLocalizations.id, current.id));
+  });
 }
 
 export async function saveDraftPlan(input: {
@@ -220,6 +318,7 @@ export async function saveDraftPlan(input: {
         generationCount: existing.plan.generationCount + 1,
       }).where(eq(plans.id, existing.plan.id));
       await tx.delete(planSegments).where(eq(planSegments.planId, existing.plan.id));
+      await tx.delete(planLocalizations).where(eq(planLocalizations.planId, existing.plan.id));
       await tx.insert(planSegments).values(buildPendingSegments(existing.plan.id, input.draft.totalDurationDays));
     });
     return existing.plan.id;
@@ -279,6 +378,7 @@ export async function savePlanEdit(input: {
         editCount: record.plan.editCount + 1,
       }).where(and(eq(plans.id, input.planId), eq(plans.status, "draft")));
       await tx.delete(planSegments).where(eq(planSegments.planId, input.planId));
+      await tx.delete(planLocalizations).where(eq(planLocalizations.planId, input.planId));
       await tx.insert(planSegments).values(buildPendingSegments(input.planId, input.draft.totalDurationDays));
     } else {
       await tx.update(plans).set({ editCount: record.plan.editCount + 1 })
@@ -314,6 +414,7 @@ export async function updateDraftPlanBounds(input: {
     await tx.update(goals).set({ dailyMinutes: input.dailyMinutes, targetDurationDays: input.durationDays })
       .where(and(eq(goals.id, record.goal.id), eq(goals.userId, input.userId), eq(goals.status, "active")));
     await tx.delete(planSegments).where(eq(planSegments.planId, input.planId));
+    await tx.delete(planLocalizations).where(eq(planLocalizations.planId, input.planId));
     await tx.insert(planSegments).values(buildPendingSegments(input.planId, input.durationDays));
   });
   return { workload, bounds: validation.bounds };
@@ -463,6 +564,8 @@ export async function getCalendar(userId: number) {
   const plan = await getPlanForGoal(userId, activeGoal.id);
   if (!plan || plan.plan.status !== "approved") return { goal: activeGoal, plan: plan?.plan ?? null, days: [] };
 
+  const language = await getUserLanguage(userId);
+  const localization = await getPlanLocalization(plan.plan.id, language);
   const rows = await db.select().from(tasks).where(eq(tasks.planId, plan.plan.id))
     .orderBy(asc(tasks.dayNumber), asc(tasks.orderIndex));
   return {
@@ -473,7 +576,7 @@ export async function getCalendar(userId: number) {
       dayNumber: task.dayNumber,
       orderIndex: task.orderIndex,
       status: task.status,
-      title: task.status === "locked" ? null : task.title,
+      title: task.status === "locked" ? null : findLocalizedTask(localization, task.dayNumber, task.orderIndex)?.title ?? task.title,
       estimatedMinutes: task.status === "locked" ? null : task.estimatedMinutes,
       completedAt: task.completedAt,
     })),
@@ -482,13 +585,18 @@ export async function getCalendar(userId: number) {
 
 export async function getCurrentTask(userId: number) {
   const db = await requireDb();
-  const rows = await db.select({ task: tasks, goal: goals }).from(tasks)
+  const rows = await db.select({ task: tasks, goal: goals, planId: plans.id }).from(tasks)
     .innerJoin(plans, eq(tasks.planId, plans.id))
     .innerJoin(goals, eq(plans.goalId, goals.id))
     .where(and(eq(goals.userId, userId), eq(goals.status, "active"), inArray(tasks.status, ["unlocked", "in_quiz"])))
     .orderBy(asc(tasks.dayNumber), asc(tasks.orderIndex))
     .limit(1);
-  return rows[0] ?? null;
+  const record = rows[0];
+  if (!record) return null;
+  const language = await getUserLanguage(userId);
+  const localization = await getPlanLocalization(record.planId, language);
+  const localizedTask = findLocalizedTask(localization, record.task.dayNumber, record.task.orderIndex);
+  return localizedTask ? { ...record, task: { ...record.task, title: localizedTask.title, description: localizedTask.description } } : record;
 }
 
 /**
@@ -601,11 +709,14 @@ export async function beginQuiz(userId: number, taskId: number) {
       .where(and(eq(tasks.id, taskId), eq(tasks.status, "unlocked")));
   }
 
+  const language = await getUserLanguage(userId);
+  const localization = await getPlanLocalization(record.task.planId, language);
+  const localizedTask = findLocalizedTask(localization, record.task.dayNumber, record.task.orderIndex);
   const attempts = await db.select({ id: quizAttempts.id }).from(quizAttempts)
     .where(and(eq(quizAttempts.quizId, record.quiz.id), eq(quizAttempts.userId, userId)));
   return {
-    task: { id: record.task.id, title: record.task.title, description: record.task.description },
-    questions: varyQuizQuestions(record.quiz.questions, attempts.length),
+    task: { id: record.task.id, title: localizedTask?.title ?? record.task.title, description: localizedTask?.description ?? record.task.description },
+    questions: varyQuizQuestions(localizedTask?.quizQuestions ?? record.quiz.questions, attempts.length),
     attemptNumber: attempts.length + 1,
   };
 }
@@ -708,6 +819,17 @@ export async function unlockSegmentStart(userId: number, planId: number, startDa
 
 function buildPendingSegments(planId: number, totalDurationDays: number) {
   return createPlanSegments(totalDurationDays).map((segment) => ({ planId, ...segment }));
+}
+
+function findLocalizedTask(
+  localization: { segmentsJson: LearningPlanSegment[] } | null,
+  dayNumber: number,
+  orderIndex: number,
+) {
+  return localization?.segmentsJson
+    .find((segment) => dayNumber >= segment.startDay && dayNumber <= segment.endDay)
+    ?.days.find((day) => day.dayNumber === dayNumber)
+    ?.tasks.find((task) => task.orderIndex === orderIndex);
 }
 
 type DatabaseTransaction = Parameters<Parameters<ReturnType<typeof drizzle>["transaction"]>[0]>[0];

@@ -76,6 +76,25 @@ export const plans = mysqlTable("plans", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+/**
+ * A cached learner-visible translation of a plan. The source plan, task ids,
+ * quiz answer ids, and progress remain canonical in their original tables.
+ */
+export const planLocalizations = mysqlTable("planLocalizations", {
+  id: int("id").autoincrement().primaryKey(),
+  planId: int("planId").notNull().references(() => plans.id, { onDelete: "cascade" }),
+  language: mysqlEnum("language", ["ar", "en"]).notNull(),
+  outlineJson: json("outlineJson").$type<LearningPlanOutline>().notNull(),
+  segmentsJson: json("segmentsJson").$type<LearningPlanSegment[]>().notNull(),
+  aiModel: varchar("aiModel", { length: 100 }).notNull(),
+  promptVersion: varchar("promptVersion", { length: 40 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("plan_localizations_plan_language_unique").on(table.planId, table.language),
+  index("plan_localizations_plan_idx").on(table.planId),
+]);
+
 export const planSegments = mysqlTable("planSegments", {
   id: int("id").autoincrement().primaryKey(),
   planId: int("planId").notNull().references(() => plans.id, { onDelete: "cascade" }),

@@ -82,7 +82,7 @@ const copy: Record<AppLanguage, Record<string, string>> = {
     "profile.language": "لغة التطبيق والمحتوى",
     "profile.languageArabic": "العربية",
     "profile.languageEnglish": "English",
-    "profile.languageDescription": "تُطبّق على الواجهة والخطة والمهام والاختبارات الحالية. قد تستغرق إعادة التجهيز لحظات.",
+    "profile.languageDescription": "تُطبّق على الواجهة والخطة والمهام والاختبارات. تُجهَّز اللغة الثانية مرة واحدة فقط، ثم يصبح التبديل فوريًا دون تغيير تقدّمك.",
     "profile.languageSaving": "جارٍ حفظ اللغة…",
     "profile.reminder": "التنبيه اليومي",
     "profile.reminderOn": "إيقاف التنبيه اليومي",
@@ -320,7 +320,7 @@ const copy: Record<AppLanguage, Record<string, string>> = {
     "profile.language": "App and content language",
     "profile.languageArabic": "العربية",
     "profile.languageEnglish": "English",
-    "profile.languageDescription": "Applies to the interface and your current plan, tasks, and quizzes. Re-preparing them may take a moment.",
+    "profile.languageDescription": "Applies to the interface, plan, tasks, and quizzes. The second language is prepared once; later switches are instant and preserve your progress.",
     "profile.languageSaving": "Saving language…",
     "profile.reminder": "Daily reminder",
     "profile.reminderOn": "Turn off daily reminder",
@@ -515,6 +515,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     retry: false,
     refetchOnMount: true,
   });
+  const utils = trpc.useUtils();
   const setLanguageMutation = trpc.preferences.setLanguage.useMutation();
 
   useEffect(() => {
@@ -537,17 +538,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = useCallback(async (nextLanguage: AppLanguage) => {
     if (nextLanguage === language) return;
-    const previousLanguage = language;
-    setLocalLanguage(nextLanguage);
     try {
       if (isAuthenticated) await setLanguageMutation.mutateAsync(nextLanguage);
       await AsyncStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
-      if (isAuthenticated) void languageQuery.refetch();
+      if (isAuthenticated) {
+        await Promise.all([
+          languageQuery.refetch(),
+          utils.plans.getForGoal.invalidate(),
+          utils.tasks.current.invalidate(),
+          utils.calendar.get.invalidate(),
+        ]);
+      }
+      setLocalLanguage(nextLanguage);
     } catch (error) {
-      setLocalLanguage(previousLanguage);
       throw error;
     }
-  }, [isAuthenticated, language, languageQuery, setLanguageMutation]);
+  }, [isAuthenticated, language, languageQuery, setLanguageMutation, utils]);
 
   const t = useCallback<Translator>((key, values) => {
     const template = copy[language][key] ?? copy.ar[key] ?? key;
