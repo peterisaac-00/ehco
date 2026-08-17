@@ -1,0 +1,1 @@
+ALTER TABLE `plans` ADD `contentLanguage` enum('ar','en');

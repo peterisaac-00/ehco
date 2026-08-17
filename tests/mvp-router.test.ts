@@ -17,6 +17,8 @@ const db = vi.hoisted(() => ({
   getFailedPlanSegments: vi.fn(),
   getUserLanguage: vi.fn().mockResolvedValue("ar"),
   setUserLanguage: vi.fn().mockImplementation(async (_userId: number, language: "ar" | "en") => language),
+  getActivePlanLanguageSnapshot: vi.fn().mockResolvedValue(null),
+  replacePlanLocalizedContent: vi.fn(),
 }));
 
 const ai = vi.hoisted(() => ({
@@ -155,7 +157,7 @@ describe("MVP router business rules", () => {
   it("stores and returns the account language preference", async () => {
     db.getUserLanguage.mockResolvedValue("ar");
     await expect(callerFor().preferences.language()).resolves.toBe("ar");
-    await expect(callerFor().preferences.setLanguage("en")).resolves.toEqual({ language: "en" });
+    await expect(callerFor().preferences.setLanguage("en")).resolves.toEqual({ language: "en", synchronized: false });
     expect(db.setUserLanguage).toHaveBeenCalledWith(1, "en");
   });
 

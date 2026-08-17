@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { generateCurriculumBlueprint, generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline } from "./learning-ai";
+import { synchronizeActivePlanLanguage } from "./content-language-sync";
 import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
 import { sdk } from "./_core/sdk";
@@ -88,9 +89,13 @@ export const appRouter = router({
   }),
   preferences: router({
     language: protectedProcedure.query(({ ctx }) => learningDb.getUserLanguage(ctx.user.id)),
-    setLanguage: protectedProcedure.input(contentLanguageSchema).mutation(async ({ ctx, input }) => ({
-      language: await learningDb.setUserLanguage(ctx.user.id, input),
-    })),
+    setLanguage: protectedProcedure.input(contentLanguageSchema).mutation(async ({ ctx, input }) => {
+      try {
+        return await synchronizeActivePlanLanguage(ctx.user.id, input);
+      } catch (error) {
+        throw toTrpcError(error);
+      }
+    }),
   }),
   goals: router({
     active: protectedProcedure.query(({ ctx }) => learningDb.getActiveGoal(ctx.user.id)),
@@ -135,6 +140,7 @@ export const appRouter = router({
           goalId: input.goalId,
           draft: outline,
           curriculumBlueprint,
+          contentLanguage: language,
           aiModel: LEARNING_MODEL,
           promptVersion: PROMPT_VERSION,
         });

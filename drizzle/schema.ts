@@ -65,6 +65,8 @@ export const plans = mysqlTable("plans", {
   draftJson: json("draftJson").$type<LearningPlanOutline>().notNull(),
   /** Persisted validated curriculum brief reused when generating all later segments. */
   curriculumJson: json("curriculumJson").$type<CurriculumBlueprint | null>(),
+  /** Language of the learner-visible outline, tasks, and quiz content. Null marks legacy content that needs synchronization. */
+  contentLanguage: mysqlEnum("contentLanguage", ["ar", "en"]),
   aiModel: varchar("aiModel", { length: 100 }).notNull(),
   promptVersion: varchar("promptVersion", { length: 40 }).notNull(),
   totalEstimatedMinutes: int("totalEstimatedMinutes").notNull().default(0),

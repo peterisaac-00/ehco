@@ -192,10 +192,12 @@ export async function saveDraftPlan(input: {
   goalId: number;
   draft: LearningPlanOutline;
   curriculumBlueprint?: CurriculumBlueprint | null;
+  contentLanguage?: ContentLanguage;
   aiModel: string;
   promptVersion: string;
 }) {
   const db = await requireDb();
+  const contentLanguage = input.contentLanguage ?? "ar";
   const goal = await getGoalById(input.userId, input.goalId);
   if (!goal || goal.status !== "active") throw new LearningStateError("الهدف المطلوب غير متاح.");
 
@@ -212,6 +214,7 @@ export async function saveDraftPlan(input: {
         totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
         draftJson: input.draft,
         curriculumJson: input.curriculumBlueprint ?? existing.plan.curriculumJson,
+        contentLanguage,
         aiModel: input.aiModel,
         promptVersion: input.promptVersion,
         generationCount: existing.plan.generationCount + 1,
@@ -230,6 +233,7 @@ export async function saveDraftPlan(input: {
       totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
       draftJson: input.draft,
       curriculumJson: input.curriculumBlueprint ?? null,
+      contentLanguage,
       aiModel: input.aiModel,
       promptVersion: input.promptVersion,
     });
@@ -485,6 +489,97 @@ export async function getCurrentTask(userId: number) {
     .orderBy(asc(tasks.dayNumber), asc(tasks.orderIndex))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Returns the active plan together with generated segment ranges so all stored
+ * learner-visible content can be rebuilt in the account's selected language.
+ */
+export async function getActivePlanLanguageSnapshot(userId: number) {
+  const db = await requireDb();
+  const activeGoal = await getActiveGoal(userId);
+  if (!activeGoal) return null;
+  const record = await getPlanForGoal(userId, activeGoal.id);
+  if (!record) return null;
+  const segments = await db.select().from(planSegments)
+    .where(and(eq(planSegments.planId, record.plan.id), eq(planSegments.status, "generated")))
+    .orderBy(asc(planSegments.startDay));
+  const hasActiveQuiz = (await db.select({ id: tasks.id }).from(tasks).where(and(
+    eq(tasks.planId, record.plan.id),
+    eq(tasks.status, "in_quiz"),
+  )).limit(1)).length > 0;
+  return { ...record, generatedSegments: segments, hasActiveQuiz };
+}
+
+/**
+ * Atomically replaces generated learner-visible content in a new language while
+ * preserving task progress, attempt history, and the plan's segment structure.
+ */
+export async function replacePlanLocalizedContent(input: {
+  userId: number;
+  planId: number;
+  language: ContentLanguage;
+  outline: LearningPlanOutline;
+  curriculumBlueprint: CurriculumBlueprint;
+  generatedSegments: LearningPlanSegment[];
+  aiModel: string;
+  promptVersion: string;
+}) {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const owner = await tx.select({ plan: plans, goal: goals }).from(plans)
+      .innerJoin(goals, eq(plans.goalId, goals.id))
+      .where(and(eq(plans.id, input.planId), eq(goals.userId, input.userId), eq(goals.status, "active")))
+      .limit(1);
+    const record = owner[0];
+    if (!record) throw new LearningStateError("الخطة المطلوبة غير متاحة.");
+
+    const activeQuiz = await tx.select({ id: tasks.id }).from(tasks).where(and(
+      eq(tasks.planId, input.planId),
+      eq(tasks.status, "in_quiz"),
+    )).limit(1);
+    if (activeQuiz.length > 0) {
+      throw new LearningStateError("أكمل الاختبار المفتوح أو أعده قبل تغيير لغة المحتوى.");
+    }
+
+    const storedSegments = await tx.select().from(planSegments).where(and(
+      eq(planSegments.planId, input.planId),
+      eq(planSegments.status, "generated"),
+    ));
+    const expectedRanges = new Set(storedSegments.map((segment) => `${segment.startDay}:${segment.endDay}`));
+    const replacementRanges = new Set(input.generatedSegments.map((segment) => `${segment.startDay}:${segment.endDay}`));
+    if (expectedRanges.size !== replacementRanges.size || [...expectedRanges].some((range) => !replacementRanges.has(range))) {
+      throw new LearningStateError("تفاصيل اللغة الجديدة لا تطابق الدفعات المحفوظة للخطة.");
+    }
+
+    await tx.update(plans).set({
+      draftJson: input.outline,
+      curriculumJson: input.curriculumBlueprint,
+      contentLanguage: input.language,
+      aiModel: input.aiModel,
+      promptVersion: input.promptVersion,
+    }).where(eq(plans.id, input.planId));
+
+    const storedTasks = await tx.select().from(tasks).where(eq(tasks.planId, input.planId));
+    const tasksBySequence = new Map(storedTasks.map((task) => [`${task.dayNumber}:${task.orderIndex}`, task]));
+    for (const segment of input.generatedSegments) {
+      await tx.update(planSegments).set({ detailJson: segment, generatedAt: new Date() })
+        .where(and(eq(planSegments.planId, input.planId), eq(planSegments.startDay, segment.startDay), eq(planSegments.endDay, segment.endDay)));
+      for (const day of segment.days) {
+        for (const generatedTask of day.tasks) {
+          const storedTask = tasksBySequence.get(`${day.dayNumber}:${generatedTask.orderIndex}`);
+          if (!storedTask) continue;
+          await tx.update(tasks).set({
+            title: generatedTask.title,
+            description: generatedTask.description,
+            estimatedMinutes: generatedTask.estimatedMinutes,
+          }).where(eq(tasks.id, storedTask.id));
+          await tx.update(quizzes).set({ questions: generatedTask.quizQuestions })
+            .where(eq(quizzes.taskId, storedTask.id));
+        }
+      }
+    }
+  });
 }
 
 export async function beginQuiz(userId: number, taskId: number) {

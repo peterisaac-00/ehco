@@ -27,7 +27,7 @@ async function main() {
   try {
     const goalId = await learningDb.createGoal(user.id, { title: "Segment verification", currentLevel: "beginner", dailyMinutes: 30, targetDurationDays: 8 });
     const outline: LearningPlanOutline = { title: "Verification", summary: "Eight days", totalDurationDays: 8, dailyMinutes: 30, days: Array.from({ length: 8 }, (_, index) => ({ dayNumber: index + 1, title: `Day ${index + 1}`, focus: "Verification" })) };
-    const planId = await learningDb.saveDraftPlan({ userId: user.id, goalId, draft: outline, aiModel: "test", promptVersion: "test" });
+    const planId = await learningDb.saveDraftPlan({ userId: user.id, goalId, draft: outline, contentLanguage: "en", aiModel: "test", promptVersion: "test" });
     await learningDb.savePlanSegment({ userId: user.id, planId, segment: segment(1, 7) });
     await learningDb.savePlanSegment({ userId: user.id, planId, segment: segment(8, 8) });
 
