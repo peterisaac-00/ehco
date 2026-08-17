@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 
 const COLORS = {
@@ -27,7 +28,8 @@ const STEP_ART: Record<number, string> = {
 
 export function GoalJourneyHeader({ step, onBack }: { step: number; onBack?: () => void }) {
   const { t } = useLanguage();
-  return <View style={styles.header}><View style={styles.headerRow}>{step > 1 ? <Pressable accessibilityRole="button" accessibilityLabel={t("onboarding.back")} onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}><MaterialIcons name="arrow-forward" size={22} color={COLORS.forest} /></Pressable> : <View style={styles.backSpacer} />}<View style={styles.brand}><Image source={require("@/assets/images/icon.png")} style={styles.logoImage} /><Text style={styles.brandText}>Echo</Text></View><View style={styles.backSpacer} /></View><ProgressDots currentStep={step} /></View>;
+  const directional = useDirectionalStyles();
+  return <View style={styles.header}><View style={[styles.headerRow, directional.row]}>{step > 1 ? <Pressable accessibilityRole="button" accessibilityLabel={t("onboarding.back")} onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}><MaterialIcons name={directional.isRTL ? "arrow-forward" : "arrow-back"} size={22} color={COLORS.forest} /></Pressable> : <View style={styles.backSpacer} />}<View style={[styles.brand, directional.row]}><Image source={require("@/assets/images/icon.png")} style={styles.logoImage} /><Text style={styles.brandText}>Ehco</Text></View><View style={styles.backSpacer} /></View><ProgressDots currentStep={step} /></View>;
 }
 
 function ProgressDots({ currentStep }: { currentStep: number }) {
@@ -57,32 +59,38 @@ export function StepTitle({ title, copy }: { title: string; copy: string }) {
 }
 
 export function JourneyTextField({ label, error, ...inputProps }: TextInputProps & { label: string; error?: string }) {
-  return <View style={styles.textFieldWrap}><Text style={styles.fieldLabel}>{label}</Text><TextInput {...inputProps} accessibilityLabel={label} style={[styles.textField, error && styles.textFieldError]} textAlign="right" placeholderTextColor={COLORS.muted} />{error ? <InlineError message={error} /> : null}</View>;
+  const directional = useDirectionalStyles();
+  return <View style={styles.textFieldWrap}><Text style={[styles.fieldLabel, directional.text]}>{label}</Text><TextInput {...inputProps} accessibilityLabel={label} style={[styles.textField, directional.text, error && styles.textFieldError]} textAlign={directional.isRTL ? "right" : "left"} placeholderTextColor={COLORS.muted} />{error ? <InlineError message={error} /> : null}</View>;
 }
 
 export function LevelChoice({ title, description, icon, selected, onPress }: { title: string; description: string; icon: IconName; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="radio" accessibilityLabel={`${title}: ${description}`} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => [styles.levelChoice, selected && styles.levelChoiceSelected, pressed && styles.pressed]}><View style={[styles.levelIcon, selected && styles.levelIconSelected]}><MaterialIcons name={icon} size={24} color={selected ? COLORS.card : COLORS.forest} /></View><View style={styles.levelCopy}><Text style={[styles.levelTitle, selected && styles.levelTitleSelected]}>{title}</Text><Text style={[styles.levelDescription, selected && styles.levelDescriptionSelected]}>{description}</Text></View><View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <MaterialIcons name="check" size={15} color={COLORS.forest} /> : null}</View></Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="radio" accessibilityLabel={`${title}: ${description}`} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => [styles.levelChoice, directional.row, selected && styles.levelChoiceSelected, pressed && styles.pressed]}><View style={[styles.levelIcon, selected && styles.levelIconSelected]}><MaterialIcons name={icon} size={24} color={selected ? COLORS.card : COLORS.forest} /></View><View style={styles.levelCopy}><Text style={[styles.levelTitle, directional.text, selected && styles.levelTitleSelected]}>{title}</Text><Text style={[styles.levelDescription, directional.text, selected && styles.levelDescriptionSelected]}>{description}</Text></View><View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <MaterialIcons name="check" size={15} color={COLORS.forest} /> : null}</View></Pressable>;
 }
 
 export function PresetChoice({ label, icon, selected, onPress }: { label: string; icon: IconName; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => [styles.preset, selected && styles.presetSelected, pressed && styles.pressed]}><MaterialIcons name={icon} size={21} color={selected ? COLORS.card : COLORS.forestMuted} /><Text style={[styles.presetText, selected && styles.presetTextSelected]}>{label}</Text><View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <MaterialIcons name="check" size={15} color={COLORS.forest} /> : null}</View></Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => [styles.preset, directional.row, selected && styles.presetSelected, pressed && styles.pressed]}><MaterialIcons name={icon} size={21} color={selected ? COLORS.card : COLORS.forestMuted} /><Text style={[styles.presetText, directional.text, selected && styles.presetTextSelected]}>{label}</Text><View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <MaterialIcons name="check" size={15} color={COLORS.forest} /> : null}</View></Pressable>;
 }
 
 export function ValueEditor({ label, suffix, value, onChangeText, error }: { label: string; suffix: string; value: string; onChangeText: (value: string) => void; error?: string }) {
-  return <View style={styles.valueEditorWrap}><Text style={styles.valueEditorLabel}>{label}</Text><View style={[styles.valueEditor, error && styles.textFieldError]}><Text style={styles.valueSuffix}>{suffix}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} keyboardType="number-pad" maxLength={3} style={styles.valueInput} textAlign="center" placeholderTextColor={COLORS.muted} /></View>{error ? <InlineError message={error} /> : null}</View>;
+  const directional = useDirectionalStyles();
+  return <View style={styles.valueEditorWrap}><Text style={[styles.valueEditorLabel, directional.text]}>{label}</Text><View style={[styles.valueEditor, directional.row, error && styles.textFieldError]}><Text style={styles.valueSuffix}>{suffix}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} keyboardType="number-pad" maxLength={3} style={styles.valueInput} textAlign="center" placeholderTextColor={COLORS.muted} /></View>{error ? <InlineError message={error} /> : null}</View>;
 }
 
 export function ReviewCard({ title, level, minutes, days }: { title: string; level: string; minutes: number; days: number }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const rows = [{ label: t("onboarding.reviewGoal"), value: title, icon: "track-changes" as IconName }, { label: t("onboarding.reviewLevel"), value: level, icon: "school" as IconName }, { label: t("onboarding.reviewDaily"), value: t("common.minutes", { count: minutes }), icon: "schedule" as IconName }, { label: t("onboarding.reviewDuration"), value: t("common.days", { count: days }), icon: "calendar-month" as IconName }];
-  return <View style={styles.reviewCard}>{rows.map((row) => <View key={row.label} style={styles.reviewRow}><View style={styles.reviewIcon}><MaterialIcons name={row.icon} size={19} color={COLORS.forest} /></View><View style={styles.reviewCopy}><Text style={styles.reviewLabel}>{row.label}</Text><Text style={styles.reviewValue} numberOfLines={2}>{row.value}</Text></View></View>)}</View>;
+  return <View style={styles.reviewCard}>{rows.map((row) => <View key={row.label} style={[styles.reviewRow, directional.row]}><View style={styles.reviewIcon}><MaterialIcons name={row.icon} size={19} color={COLORS.forest} /></View><View style={styles.reviewCopy}><Text style={[styles.reviewLabel, directional.text]}>{row.label}</Text><Text style={[styles.reviewValue, directional.text]} numberOfLines={2}>{row.value}</Text></View></View>)}</View>;
 }
 
 export function JourneyPrimaryButton({ label, loading, disabled, onPress }: { label: string; loading?: boolean; disabled?: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, busy: loading }} disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [styles.primary, (disabled || loading) && styles.primaryDisabled, pressed && !disabled && !loading && styles.pressed]}>{loading ? <ActivityIndicator color={COLORS.ivory} /> : <><MaterialIcons name="arrow-back" size={22} color={COLORS.ivory} /><Text style={styles.primaryText}>{label}</Text></>}</Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, busy: loading }} disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [styles.primary, directional.row, (disabled || loading) && styles.primaryDisabled, pressed && !disabled && !loading && styles.pressed]}>{loading ? <ActivityIndicator color={COLORS.ivory} /> : <><MaterialIcons name={directional.isRTL ? "arrow-back" : "arrow-forward"} size={22} color={COLORS.ivory} /><Text style={styles.primaryText}>{label}</Text></>}</Pressable>;
 }
 
-export function InlineError({ message }: { message: string }) { return <View style={styles.errorBox}><MaterialIcons name="error-outline" size={17} color={COLORS.error} /><Text style={styles.errorText}>{message}</Text></View>; }
+export function InlineError({ message }: { message: string }) { const directional = useDirectionalStyles(); return <View style={[styles.errorBox, directional.row]}><MaterialIcons name="error-outline" size={17} color={COLORS.error} /><Text style={[styles.errorText, directional.text]}>{message}</Text></View>; }
 
 const styles = StyleSheet.create({
   header: { gap: 19, paddingHorizontal: 22, paddingTop: 9 },

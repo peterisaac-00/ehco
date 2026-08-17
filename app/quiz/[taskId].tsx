@@ -5,7 +5,9 @@ import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, 
 
 import { ScreenContainer } from "@/components/screen-container";
 import { QuizLifestyleScene, QuizScoreRing } from "@/components/quiz/quiz-visuals";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
+import { getQuizEntryState } from "@/lib/quiz-entry-flow";
 import { trpc } from "@/lib/trpc";
 
 type QuizOutcome = {
@@ -35,14 +37,16 @@ const COLORS = {
 
 export default function QuizScreen() {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const params = useLocalSearchParams<{ taskId: string }>();
   const taskId = Number(params.taskId);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<QuizOutcome | null>(null);
+  const [stage, setStage] = useState<"lesson" | "quiz">("lesson");
   const entrance = useRef(new Animated.Value(0)).current;
   const progressAnimation = useRef(new Animated.Value(0)).current;
   const utils = trpc.useUtils();
-  const beginQuiz = trpc.tasks.beginQuiz.useMutation({ onError: (error) => Alert.alert(t("quiz.openError"), error.message) });
+  const beginQuiz = trpc.tasks.beginQuiz.useMutation();
   const submitQuiz = trpc.tasks.submitQuiz.useMutation({
     onSuccess: async (result) => {
       await Promise.all([utils.tasks.current.invalidate(), utils.calendar.get.invalidate()]);
@@ -60,7 +64,7 @@ export default function QuizScreen() {
   });
 
   useEffect(() => {
-    if (Number.isInteger(taskId) && taskId > 0 && !beginQuiz.isPending && !beginQuiz.data) beginQuiz.mutate({ taskId });
+    if (Number.isInteger(taskId) && taskId > 0 && !beginQuiz.isPending && !beginQuiz.data && !beginQuiz.isError) beginQuiz.mutate({ taskId });
   }, [taskId, beginQuiz]);
 
   const questions = useMemo(() => beginQuiz.data?.questions ?? [], [beginQuiz.data]);
@@ -81,10 +85,24 @@ export default function QuizScreen() {
   const retry = () => {
     setAnswers({});
     setOutcome(null);
+    setStage("lesson");
     beginQuiz.mutate({ taskId });
   };
 
-  if (beginQuiz.isPending || !beginQuiz.data) {
+  const entryState = getQuizEntryState({
+    isPending: beginQuiz.isPending,
+    isError: beginQuiz.isError,
+    hasQuizData: Boolean(beginQuiz.data),
+  });
+
+  if (entryState === "error") {
+    return <QuizOpenError onRetry={() => {
+      beginQuiz.reset();
+      beginQuiz.mutate({ taskId });
+    }} />;
+  }
+
+  if (entryState === "loading") {
     return (
       <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
         <View style={styles.centerContainer}>
@@ -94,6 +112,9 @@ export default function QuizScreen() {
       </ScreenContainer>
     );
   }
+
+  const quizData = beginQuiz.data;
+  if (!quizData) return null;
 
   if (outcome) {
     return (
@@ -108,6 +129,10 @@ export default function QuizScreen() {
     );
   }
 
+  if (stage === "lesson") {
+    return <LessonReader task={quizData.task} onStartQuiz={() => setStage("quiz")} />;
+  }
+
   const animatedProgressWidth = progressAnimation.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
 
   return (
@@ -117,16 +142,16 @@ export default function QuizScreen() {
           {/* Header */}
           <Animated.View style={[styles.header, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
             <QuizLifestyleScene compact />
-            <View style={styles.eyebrowRow}>
+            <View style={[styles.eyebrowRow, directional.row]}>
               <Text style={styles.eyebrow}>{t("quiz.title")}</Text>
               <View style={styles.badgeWrap}><Text style={styles.badgeText}>{t("quiz.questionCount", { count: questions.length })}</Text></View>
             </View>
-            <Text style={styles.title}>{beginQuiz.data.task.title}</Text>
-            <Text style={styles.instruction}>{t("quiz.instruction")}</Text>
+            <Text style={[styles.title, directional.text]}>{quizData.task.title}</Text>
+            <Text style={[styles.instruction, directional.text]}>{t("quiz.instruction")}</Text>
             
             {/* Progress indicator */}
             <View style={styles.progressWrap}>
-              <View style={styles.progressMeta}>
+              <View style={[styles.progressMeta, directional.row]}>
                 <Text style={styles.progressLabel}>{t("quiz.progress")}</Text>
                 <Text style={styles.progressCount}>{answeredCount} / {questions.length}</Text>
               </View>
@@ -141,9 +166,9 @@ export default function QuizScreen() {
             const hasAnswered = Boolean(answers[question.id]);
             return (
               <Animated.View key={question.id} style={[styles.questionCard, hasAnswered && styles.questionCardAnswered, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [16 + index * 4, 0] }) }] }]}>
-                <View style={styles.questionHeading}>
+                <View style={[styles.questionHeading, directional.row]}>
                   <View style={styles.questionBadge}><Text style={styles.questionBadgeText}>{String(index + 1).padStart(2, "0")}</Text></View>
-                  <Text style={styles.prompt}>{question.prompt}</Text>
+                  <Text style={[styles.prompt, directional.text]}>{question.prompt}</Text>
                 </View>
                 <View style={styles.options}>
                   {question.options.map((option) => {
@@ -155,9 +180,9 @@ export default function QuizScreen() {
                         accessibilityState={{ selected }}
                         accessibilityLabel={t("quiz.questionAccessibility", { index: index + 1, text: option.text })}
                         onPress={() => setAnswers((current) => ({ ...current, [question.id]: option.id }))}
-                        style={({ pressed }) => [styles.option, selected && styles.optionSelected, pressed && styles.optionPressed]}
+                        style={({ pressed }) => [styles.option, directional.row, selected && styles.optionSelected, pressed && styles.optionPressed]}
                       >
-                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option.text}</Text>
+                        <Text style={[styles.optionText, directional.text, selected && styles.optionTextSelected]}>{option.text}</Text>
                         <View style={[styles.radioIndicator, selected && styles.radioIndicatorSelected]}>
                           {selected ? <MaterialIcons name="check" size={14} color={COLORS.ivory} /> : null}
                         </View>
@@ -172,7 +197,7 @@ export default function QuizScreen() {
 
         {/* Anchored submit footer */}
         <View style={styles.footer}>
-          <View style={styles.counterRow}>
+          <View style={[styles.counterRow, directional.row]}>
             <MaterialIcons name={completed ? "check-circle" : "radio-button-unchecked"} size={18} color={completed ? COLORS.success : COLORS.forestMuted} />
             <Text style={[styles.counter, completed && styles.counterComplete]}>
               {completed ? t("quiz.readyToVerify") : t("quiz.answerProgress", { answered: answeredCount, total: questions.length })}
@@ -186,18 +211,82 @@ export default function QuizScreen() {
             style={({ pressed }) => [styles.submitButton, (!completed || submitQuiz.isPending) && styles.submitButtonDisabled, pressed && completed && styles.pressed]}
           >
             {submitQuiz.isPending ? (
-              <View style={styles.submitRow}>
-                <ActivityIndicator color={COLORS.ivory} size="small" />
+              <View style={[styles.submitRow, directional.row]}>
+              <ActivityIndicator color={COLORS.ivory} size="small" />
                 <Text style={styles.submitButtonText}>{t("quiz.verifying")}</Text>
               </View>
             ) : (
-              <View style={styles.submitRow}>
-                <MaterialIcons name="arrow-back" size={20} color={COLORS.ivory} />
+              <View style={[styles.submitRow, directional.row]}>
+              <MaterialIcons name="arrow-back" size={20} color={COLORS.ivory} />
                 <Text style={styles.submitButtonText}>{completed ? t("quiz.verify") : t("quiz.completeToVerify")}</Text>
               </View>
             )}
           </Pressable>
         </View>
+      </View>
+    </ScreenContainer>
+  );
+}
+
+function LessonReader({
+  task,
+  onStartQuiz,
+}: {
+  task: { title: string; description: string | null };
+  onStartQuiz: () => void;
+}) {
+  const { t } = useLanguage();
+  const directional = useDirectionalStyles();
+  return (
+    <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]">
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.lessonContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.lessonHero}>
+            <QuizLifestyleScene compact />
+            <View style={[styles.lessonEyebrowRow, directional.row]}>
+              <View style={styles.lessonIcon}><MaterialIcons name="menu-book" size={20} color={COLORS.forest} /></View>
+              <Text style={[styles.lessonEyebrow, directional.text]}>{t("quiz.lessonEyebrow")}</Text>
+            </View>
+            <Text style={[styles.lessonTitle, directional.text]}>{task.title}</Text>
+            <Text style={[styles.lessonInstruction, directional.text]}>{t("quiz.lessonInstruction")}</Text>
+          </View>
+          <View style={styles.lessonCard}>
+            <Text style={[styles.lessonBody, directional.text]}>{task.description?.trim() || t("quiz.lessonMissingDescription")}</Text>
+          </View>
+          <View style={[styles.lessonTip, directional.row]}>
+            <MaterialIcons name="lightbulb-outline" size={19} color={COLORS.forest} />
+            <Text style={[styles.lessonTipText, directional.text]}>{t("quiz.lessonTip")}</Text>
+          </View>
+        </ScrollView>
+        <View style={styles.footer}>
+          <Pressable accessibilityRole="button" onPress={onStartQuiz} style={({ pressed }) => [styles.submitButton, pressed && styles.pressed]}>
+            <View style={[styles.submitRow, directional.row]}>
+              <MaterialIcons name="quiz" size={20} color={COLORS.ivory} />
+              <Text style={styles.submitButtonText}>{t("quiz.startQuiz")}</Text>
+            </View>
+          </Pressable>
+        </View>
+      </View>
+    </ScreenContainer>
+  );
+}
+
+function QuizOpenError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLanguage();
+  const directional = useDirectionalStyles();
+  return (
+    <ScreenContainer edges={["top", "bottom", "left", "right"]} containerClassName="bg-[#FDF9F4]" className="items-center justify-center p-6">
+      <View style={styles.openErrorCard}>
+        <View style={styles.openErrorIcon}><MaterialIcons name="cloud-off" size={34} color={COLORS.error} /></View>
+        <Text style={styles.openErrorTitle}>{t("quiz.openError")}</Text>
+        <Text style={styles.openErrorCopy}>{t("quiz.openErrorCopy")}</Text>
+        <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [styles.openErrorPrimary, directional.row, pressed && styles.pressed]}>
+          <MaterialIcons name="refresh" size={20} color={COLORS.ivory} />
+          <Text style={styles.openErrorPrimaryText}>{t("common.retry")}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.replace("/")} style={({ pressed }) => [styles.openErrorSecondary, pressed && styles.pressed]}>
+          <Text style={styles.openErrorSecondaryText}>{t("quiz.backHome")}</Text>
+        </Pressable>
       </View>
     </ScreenContainer>
   );
@@ -264,6 +353,17 @@ const styles = StyleSheet.create({
   loadingText: { color: COLORS.forestMuted, fontSize: 15, fontWeight: "600" },
   root: { flex: 1 },
   content: { gap: 20, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 },
+  lessonContent: { gap: 16, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 },
+  lessonHero: { gap: 10, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 24, padding: 20 },
+  lessonEyebrowRow: { flexDirection: "row-reverse", alignItems: "center", gap: 8 },
+  lessonIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.cream },
+  lessonEyebrow: { color: COLORS.forestMuted, fontSize: 13, fontWeight: "800", textAlign: "right" },
+  lessonTitle: { color: COLORS.forest, fontSize: 25, fontWeight: "800", lineHeight: 34, textAlign: "right" },
+  lessonInstruction: { color: COLORS.forestMuted, fontSize: 14, lineHeight: 22, textAlign: "right" },
+  lessonCard: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 22, padding: 20 },
+  lessonBody: { color: COLORS.forest, fontSize: 16, fontWeight: "500", lineHeight: 28, textAlign: "right" },
+  lessonTip: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 9, borderRadius: 16, backgroundColor: COLORS.successBg, borderWidth: 1, borderColor: "#D0E2C8", padding: 14 },
+  lessonTipText: { flex: 1, color: COLORS.forest, fontSize: 13, fontWeight: "700", lineHeight: 20, textAlign: "right" },
   header: { gap: 8, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 24, padding: 20 },
   eyebrowRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   eyebrow: { color: COLORS.forestMuted, fontSize: 13, fontWeight: "700" },
@@ -318,5 +418,13 @@ const styles = StyleSheet.create({
   primaryActionText: { color: COLORS.ivory, fontSize: 15, fontWeight: "800" },
   secondaryAction: { backgroundColor: COLORS.cream, borderWidth: 1, borderColor: COLORS.border },
   secondaryActionText: { color: COLORS.forest, fontSize: 15, fontWeight: "800" },
+  openErrorCard: { alignSelf: "stretch", alignItems: "center", gap: 12, borderRadius: 26, borderWidth: 1, borderColor: "#F0D4C8", backgroundColor: COLORS.card, padding: 24 },
+  openErrorIcon: { width: 68, height: 68, borderRadius: 34, alignItems: "center", justifyContent: "center", backgroundColor: "#FCEBE5" },
+  openErrorTitle: { color: COLORS.forest, fontSize: 21, fontWeight: "800", textAlign: "center" },
+  openErrorCopy: { color: COLORS.forestMuted, fontSize: 14, lineHeight: 22, textAlign: "center" },
+  openErrorPrimary: { alignSelf: "stretch", minHeight: 54, borderRadius: 16, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.forest, marginTop: 4 },
+  openErrorPrimaryText: { color: COLORS.ivory, fontSize: 15, fontWeight: "800" },
+  openErrorSecondary: { minHeight: 42, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
+  openErrorSecondaryText: { color: COLORS.forest, fontSize: 14, fontWeight: "800" },
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
 });

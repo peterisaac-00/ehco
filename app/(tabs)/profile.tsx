@@ -21,6 +21,7 @@ import {
   isDailyReminderEnabled,
   syncDailyReminderTask,
 } from "@/lib/daily-reminder";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -138,6 +139,7 @@ export default function ProfileScreen() {
 
 function ProfileHero({ reminderEnabled }: { reminderEnabled: boolean }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -146,13 +148,13 @@ function ProfileHero({ reminderEnabled }: { reminderEnabled: boolean }) {
     <Animated.View style={[styles.hero, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
       <Image source={{ uri: HERO_ILLUSTRATION }} style={styles.heroIllustration} resizeMode="cover" />
       <ProfileLandscape />
-      <View style={styles.heroTopRow}>
+      <View style={[styles.heroTopRow, directional.row]}>
         <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
         <View style={styles.heroBell}><MaterialIcons name="notifications-none" size={25} color={COLORS.forest} />{reminderEnabled && <View style={styles.notificationDot} />}</View>
       </View>
-      <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>{t("profile.title")}</Text>
-        <Text style={styles.heroSubtitle}>{t("profile.subtitle")}</Text>
+      <View style={[styles.heroCopy, directional.start]}>
+        <Text style={[styles.heroTitle, directional.text]}>{t("profile.title")}</Text>
+        <Text style={[styles.heroSubtitle, directional.text]}>{t("profile.subtitle")}</Text>
       </View>
     </Animated.View>
   );
@@ -187,6 +189,7 @@ function ProfileIdentityCard({
   dailyMinutes?: number;
 }) {
   const { language, t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 340, useNativeDriver: true }).start();
@@ -199,11 +202,11 @@ function ProfileIdentityCard({
 
   return (
     <Animated.View style={[styles.identityCard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-      <View style={styles.identityRow}>
+      <View style={[styles.identityRow, directional.row]}>
         <Image source={{ uri: AVATAR_ILLUSTRATION }} style={styles.avatar} />
-        <View style={styles.identityCopy}><Text numberOfLines={1} style={styles.userName}>{name} <Text style={styles.nameLeaf}>⌁</Text></Text><Text numberOfLines={1} style={styles.userEmail}>{email}</Text><View style={styles.statusPill}><MaterialIcons name="check-circle" size={15} color="#547853" /><Text style={styles.statusText}>{isAuthenticated ? t("profile.activeStatus") : t("profile.welcomeStatus")}</Text></View></View>
+        <View style={[styles.identityCopy, directional.start]}><Text numberOfLines={1} style={[styles.userName, directional.text]}>{name} <Text style={styles.nameLeaf}>⌁</Text></Text><Text numberOfLines={1} style={[styles.userEmail, directional.text]}>{email}</Text><View style={[styles.statusPill, directional.row]}><MaterialIcons name="check-circle" size={15} color="#547853" /><Text style={styles.statusText}>{isAuthenticated ? t("profile.activeStatus") : t("profile.welcomeStatus")}</Text></View></View>
       </View>
-      {stats.length > 0 && <><View style={styles.identityDivider} /><View style={styles.profileStats}>{stats.map((stat, index) => <ProfileStat key={stat.label} {...stat} bordered={index !== stats.length - 1} />)}</View></>}
+      {stats.length > 0 && <><View style={styles.identityDivider} /><View style={[styles.profileStats, directional.row]}>{stats.map((stat, index) => <ProfileStat key={stat.label} {...stat} bordered={index !== stats.length - 1} />)}</View></>}
     </Animated.View>
   );
 }
@@ -249,41 +252,48 @@ function LearningSettingsCard({
 }
 
 function LearningSettingRow({ icon, title, value, divided }: { icon: IconName; title: string; value: string; divided: boolean }) {
-  return <View style={[styles.settingRow, divided && styles.settingRowDivided]}><View style={styles.settingIcon}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>{title}</Text><Text style={styles.settingValue}>{value}</Text></View></View>;
+  const directional = useDirectionalStyles();
+  return <View style={[styles.settingRow, directional.row, divided && styles.settingRowDivided]}><View style={styles.settingIcon}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /></View><View style={[styles.settingCopy, directional.start]}><Text style={[styles.settingTitle, directional.text]}>{title}</Text><Text style={[styles.settingValue, directional.text]}>{value}</Text></View></View>;
 }
 
 function LanguageRow({ language, loading, onPress }: { language: "ar" | "en"; loading: boolean; onPress: () => void }) {
   const { t } = useLanguage();
-  return <Pressable accessibilityRole="button" accessibilityState={{ busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, styles.settingRowDivided, pressed && !loading && styles.pressed]}><View style={styles.settingIcon}><MaterialIcons name="translate" size={22} color={COLORS.forestMuted} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>{t("profile.language")}</Text><Text style={styles.settingValue}>{t("profile.languageDescription")}</Text></View>{loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={styles.languageValue}><Text style={styles.languageValueText}>{language === "ar" ? t("profile.languageArabic") : t("profile.languageEnglish")}</Text><MaterialIcons name="swap-horiz" size={18} color={COLORS.forest} /></View>}</Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="button" accessibilityState={{ busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, directional.row, styles.settingRowDivided, pressed && !loading && styles.pressed]}><View style={styles.settingIcon}><MaterialIcons name="translate" size={22} color={COLORS.forestMuted} /></View><View style={[styles.settingCopy, directional.start]}><Text style={[styles.settingTitle, directional.text]}>{t("profile.language")}</Text><Text style={[styles.settingValue, directional.text]}>{t("profile.languageDescription")}</Text></View>{loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={[styles.languageValue, directional.row]}><Text style={styles.languageValueText}>{language === "ar" ? t("profile.languageArabic") : t("profile.languageEnglish")}</Text><MaterialIcons name="swap-horiz" size={18} color={COLORS.forest} /></View>}</Pressable>;
 }
 
 function ReminderRow({ enabled, loading, onPress }: { enabled: boolean; loading: boolean; onPress: () => void }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
-    <Pressable accessibilityRole="switch" accessibilityState={{ checked: enabled, busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && !loading && styles.pressed]}>
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: enabled, busy: loading }} disabled={loading} onPress={onPress} style={({ pressed }) => [styles.settingRow, directional.row, pressed && !loading && styles.pressed]}>
       <View style={styles.settingIcon}><MaterialIcons name="notifications" size={22} color={COLORS.forestMuted} /></View>
-      <View style={styles.settingCopy}><Text style={styles.settingTitle}>{t("profile.reminder")}</Text><Text style={styles.settingValue}>{enabled ? t("profile.reminderOn") : t("profile.reminderOff")}</Text></View>
+      <View style={[styles.settingCopy, directional.start]}><Text style={[styles.settingTitle, directional.text]}>{t("profile.reminder")}</Text><Text style={[styles.settingValue, directional.text]}>{enabled ? t("profile.reminderOn") : t("profile.reminderOff")}</Text></View>
       {loading ? <ActivityIndicator size="small" color={COLORS.forest} /> : <View style={[styles.toggle, enabled && styles.toggleEnabled]}><View style={[styles.toggleKnob, enabled && styles.toggleKnobEnabled]} /></View>}
     </Pressable>
   );
 }
 
 function SectionHeading({ label, icon }: { label: string; icon: IconName }) {
-  return <View style={styles.sectionHeading}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /><Text style={styles.sectionHeadingText}>{label}</Text></View>;
+  const directional = useDirectionalStyles();
+  return <View style={[styles.sectionHeading, directional.row]}><MaterialIcons name={icon} size={22} color={COLORS.forestMuted} /><Text style={[styles.sectionHeadingText, directional.text]}>{label}</Text></View>;
 }
 
 function LogoutButton({ onPress }: { onPress: () => void }) {
   const { t } = useLanguage();
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color={COLORS.danger} /><Text style={styles.logoutText}>{t("profile.logout")}</Text></Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.logoutButton, directional.row, pressed && styles.pressed]}><MaterialIcons name="logout" size={21} color={COLORS.danger} /><Text style={styles.logoutText}>{t("profile.logout")}</Text></Pressable>;
 }
 
 function MotivationCard() {
   const { t } = useLanguage();
-  return <View style={styles.motivationCard}><Image source={{ uri: MOTIVATION_ILLUSTRATION }} style={styles.motivationIllustration} resizeMode="cover" /><View style={styles.motivationCopy}><Text style={styles.motivationTitle}>{t("profile.motivationTitle")}</Text><Text style={styles.motivationText}>{t("profile.motivationCopy")}</Text></View></View>;
+  const directional = useDirectionalStyles();
+  return <View style={styles.motivationCard}><Image source={{ uri: MOTIVATION_ILLUSTRATION }} style={styles.motivationIllustration} resizeMode="cover" /><View style={[styles.motivationCopy, directional.start]}><Text style={[styles.motivationTitle, directional.text]}>{t("profile.motivationTitle")}</Text><Text style={[styles.motivationText, directional.text]}>{t("profile.motivationCopy")}</Text></View></View>;
 }
 
 function ProfileAction({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color={COLORS.ivory} /><Text style={styles.primaryActionText}>{label}</Text></Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.primaryAction, directional.row, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color={COLORS.ivory} /><Text style={styles.primaryActionText}>{label}</Text></Pressable>;
 }
 
 function ProfileLoading() {

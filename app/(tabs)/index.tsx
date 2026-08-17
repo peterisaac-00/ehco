@@ -16,6 +16,7 @@ import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from "re
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { isDailyReminderEnabled } from "@/lib/daily-reminder";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
@@ -118,17 +119,18 @@ function HomeLoading() {
 
 function GuestHome() {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]" edges={["top", "left", "right"]}>
       <View style={styles.guestRoot}>
         <GuestLandscapeScene />
-        <View style={styles.guestBrand}>
+        <View style={[styles.guestBrand, directional.row]}>
           <Image source={require("../../assets/images/icon.png")} style={styles.guestLogo} />
-          <Text style={styles.guestBrandName}>echo</Text>
+          <Text style={styles.guestBrandName}>Ehco</Text>
         </View>
         <View style={styles.guestHero}>
-          <Text style={styles.guestHeadline}>{t("home.guestHeadline")}</Text>
-          <Text style={styles.guestCopy}>{t("home.guestCopy")}</Text>
+          <Text style={[styles.guestHeadline, directional.text]}>{t("home.guestHeadline")}</Text>
+          <Text style={[styles.guestCopy, directional.text]}>{t("home.guestCopy")}</Text>
         </View>
         <View style={styles.guestActionSheet}>
           <HomeAction
@@ -186,9 +188,10 @@ function GuestLandscapeScene() {
 
 function HomeHeader({ name, reminderEnabled }: { name?: string; reminderEnabled: boolean }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
     <Animated.View style={styles.header}>
-      <View style={styles.headerTop}>
+      <View style={[styles.headerTop, directional.row]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("home.reminderSettings")}
@@ -198,18 +201,19 @@ function HomeHeader({ name, reminderEnabled }: { name?: string; reminderEnabled:
           <MaterialIcons name="notifications-none" size={24} color={COLORS.forest} />
           {reminderEnabled && <View style={styles.notificationDot} />}
         </Pressable>
-        <View style={styles.greetingBlock}>
-          <Text style={styles.greeting}>{t("home.greeting", { name: name ?? t("home.guestName") })} <Text style={styles.greetingLeaf}>⌁</Text></Text>
+        <View style={[styles.greetingBlock, directional.start]}>
+          <Text style={[styles.greeting, directional.text]}>{t("home.greeting", { name: name ?? t("home.guestName") })} <Text style={styles.greetingLeaf}>⌁</Text></Text>
         </View>
       </View>
-      <Text style={styles.screenTitle}>{t("home.nextTask")}</Text>
-      <Text style={styles.headerCopy}>{t("home.keepGoing")}</Text>
+      <Text style={[styles.screenTitle, directional.text]}>{t("home.nextTask")}</Text>
+      <Text style={[styles.headerCopy, directional.text]}>{t("home.keepGoing")}</Text>
     </Animated.View>
   );
 }
 
 function CurrentTaskCard({ task, goal }: { task: CurrentTask; goal: CurrentGoal }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -237,13 +241,13 @@ function CurrentTaskCard({ task, goal }: { task: CurrentTask; goal: CurrentGoal 
         <View style={styles.dayBadge}>
           <Text style={styles.dayBadgeText}>{t("home.dayOf", { day: task.dayNumber, total: goal.targetDurationDays })}</Text>
         </View>
-        <Text numberOfLines={3} style={styles.taskTitle}>{task.title}</Text>
-        <View style={styles.taskMeta}>
-          <View style={styles.metaItem}>
+        <Text numberOfLines={3} style={[styles.taskTitle, directional.text]}>{task.title}</Text>
+        <View style={[styles.taskMeta, directional.row]}>
+          <View style={[styles.metaItem, directional.row]}>
             <MaterialIcons name="schedule" size={17} color={COLORS.forestMuted} />
             <Text style={styles.metaText}>{t("common.minutes", { count: task.estimatedMinutes })}</Text>
           </View>
-          <View style={styles.metaItem}>
+          <View style={[styles.metaItem, directional.row]}>
             <MaterialIcons name={task.status === "in_quiz" ? "fact-check" : "bookmark-border"} size={17} color={COLORS.forestMuted} />
             <Text style={styles.metaText}>{task.status === "in_quiz" ? t("home.quizActive") : t("home.availableNow")}</Text>
           </View>
@@ -275,14 +279,15 @@ function TaskLoadingCard() {
 
 function NoTaskCard() {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
-    <View style={styles.emptyCard}>
+    <View style={[styles.emptyCard, directional.row]}>
       <View style={styles.emptyIcon}>
         <MaterialIcons name="lock-outline" size={35} color={COLORS.forest} />
       </View>
       <View style={styles.emptyCopyBlock}>
-        <Text style={styles.emptyTitle}>{t("home.noTask")}</Text>
-        <Text style={styles.emptyCopy}>{t("home.noTaskCopy")}</Text>
+        <Text style={[styles.emptyTitle, directional.text]}>{t("home.noTask")}</Text>
+        <Text style={[styles.emptyCopy, directional.text]}>{t("home.noTaskCopy")}</Text>
         <HomeAction label={t("home.goToPlan")} icon="map" variant="soft" onPress={() => router.push("/(tabs)/plan")} style={styles.emptyAction} />
       </View>
     </View>
@@ -303,6 +308,7 @@ function HomeError({ onRetry }: { onRetry: () => void }) {
 
 function ProgressGuide() {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const steps = [
     { icon: "task-alt" as const, title: t("home.progressStep1.title"), copy: t("home.progressStep1.copy") },
     { icon: "quiz" as const, title: t("home.progressStep2.title"), copy: t("home.progressStep2.copy") },
@@ -311,15 +317,15 @@ function ProgressGuide() {
 
   return (
     <View style={styles.progressCard}>
-      <Text style={styles.progressTitle}>{t("home.progressHow")}</Text>
-      <View style={styles.progressInner}>
+      <Text style={[styles.progressTitle, directional.text]}>{t("home.progressHow")}</Text>
+      <View style={[styles.progressInner, directional.row]}>
         <View style={styles.progressSteps}>
           {steps.map((step) => (
-            <View style={styles.progressStep} key={step.title}>
+            <View style={[styles.progressStep, directional.row]} key={step.title}>
               <View style={styles.stepIcon}><MaterialIcons name={step.icon} size={18} color={COLORS.forest} /></View>
               <View style={styles.stepCopy}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepText}>{step.copy}</Text>
+                <Text style={[styles.stepTitle, directional.text]}>{step.title}</Text>
+                <Text style={[styles.stepText, directional.text]}>{step.copy}</Text>
               </View>
             </View>
           ))}
@@ -343,12 +349,13 @@ function HomeAction({
   variant?: "primary" | "soft";
   style?: object;
 }) {
+  const directional = useDirectionalStyles();
   const soft = variant === "soft";
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.homeAction, soft ? styles.homeActionSoft : styles.homeActionPrimary, style, pressed && styles.homeActionPressed]}
+      style={({ pressed }) => [styles.homeAction, directional.row, soft ? styles.homeActionSoft : styles.homeActionPrimary, style, pressed && styles.homeActionPressed]}
     >
       <MaterialIcons name={icon} size={20} color={soft ? COLORS.forest : COLORS.ivory} />
       <Text style={[styles.homeActionText, soft ? styles.homeActionTextSoft : styles.homeActionTextPrimary]}>{label}</Text>

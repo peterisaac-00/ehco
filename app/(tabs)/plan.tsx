@@ -18,6 +18,7 @@ import {
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
@@ -220,6 +221,7 @@ export default function PlanScreen() {
 
 function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -233,7 +235,7 @@ function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
       ]}
     >
       <Image source={{ uri: HERO_ILLUSTRATION }} style={styles.heroIllustration} resizeMode="cover" />
-      <View style={styles.heroTopRow}>
+      <View style={[styles.heroTopRow, directional.row]}>
         <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
         <Pressable
           accessibilityRole="button"
@@ -244,9 +246,9 @@ function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
           <MaterialIcons name="more-horiz" size={25} color={COLORS.forest} />
         </Pressable>
       </View>
-      <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>{t("plan.title")}</Text>
-        <Text style={styles.heroSubtitle}>{t("plan.subtitle")}</Text>
+      <View style={[styles.heroCopy, directional.start]}>
+        <Text style={[styles.heroTitle, directional.text]}>{t("plan.title")}</Text>
+        <Text style={[styles.heroSubtitle, directional.text]}>{t("plan.subtitle")}</Text>
       </View>
     </Animated.View>
   );
@@ -266,6 +268,7 @@ function PlanSummaryCard({
   durationDays: number;
 }) {
   const { language, t } = useLanguage();
+  const directional = useDirectionalStyles();
   const fill = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fill, { toValue: progress, duration: 450, useNativeDriver: false }).start();
@@ -279,19 +282,19 @@ function PlanSummaryCard({
 
   return (
     <View style={styles.summaryCard}>
-      <View style={styles.goalRow}>
-        <MaterialIcons name="chevron-left" size={27} color={COLORS.forest} />
-        <View style={styles.goalCopy}>
-          <Text style={styles.goalLabel}>{t("plan.goal")}</Text>
-          <Text numberOfLines={2} style={styles.goalTitle}>{goalTitle}</Text>
+      <View style={[styles.goalRow, directional.row]}>
+        <MaterialIcons name={directional.isRTL ? "chevron-left" : "chevron-right"} size={27} color={COLORS.forest} />
+        <View style={[styles.goalCopy, directional.start]}>
+          <Text style={[styles.goalLabel, directional.text]}>{t("plan.goal")}</Text>
+          <Text numberOfLines={2} style={[styles.goalTitle, directional.text]}>{goalTitle}</Text>
         </View>
         <View style={styles.goalIcon}><MaterialIcons name="track-changes" size={30} color={COLORS.forest} /></View>
       </View>
       <View style={styles.summaryDivider} />
-      <View style={styles.statsRow}>
+      <View style={[styles.statsRow, directional.row]}>
         {stats.map((stat, index) => (
           <View key={stat.label} style={[styles.statItem, index !== stats.length - 1 && styles.statSeparator]}>
-            <View style={styles.statLabelRow}><MaterialIcons name={stat.icon} size={17} color={COLORS.forestMuted} /><Text style={styles.statLabel}>{stat.label}</Text></View>
+            <View style={[styles.statLabelRow, directional.row]}><MaterialIcons name={stat.icon} size={17} color={COLORS.forestMuted} /><Text style={styles.statLabel}>{stat.label}</Text></View>
             <Text style={styles.statValue}>{stat.value}</Text>
           </View>
         ))}
@@ -306,8 +309,9 @@ function PlanSummaryCard({
 
 function ViewSwitcher({ viewMode, onChange }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
-    <View style={styles.switcher}>
+    <View style={[styles.switcher, directional.row]}>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: viewMode === "tasks" }} onPress={() => onChange("tasks")} style={[styles.switchTab, viewMode === "tasks" && styles.switchTabActive]}>
         <Text style={[styles.switchText, viewMode === "tasks" && styles.switchTextActive]}>{t("plan.tasks")}</Text>
       </Pressable>
@@ -338,12 +342,13 @@ function JourneyStageCard({
   isLast: boolean;
 }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const completed = stage.state === "completed";
   const current = stage.state === "current";
   const locked = stage.state === "locked";
   const stageImage = STAGE_ASSETS[index % STAGE_ASSETS.length];
   return (
-    <View style={styles.timelineRow}>
+    <View style={[styles.timelineRow, directional.row]}>
       <View style={styles.timelineRail}>
         <View style={[styles.timelineMarker, completed && styles.markerCompleted, current && styles.markerCurrent, locked && styles.markerLocked]}>
           {completed ? <MaterialIcons name="check" size={18} color={COLORS.ivory} /> : current ? <View style={styles.currentCore} /> : <MaterialIcons name="lock-outline" size={15} color={COLORS.warmGray} />}
@@ -355,12 +360,12 @@ function JourneyStageCard({
         <Text style={[styles.stageRange, locked && styles.stageMuted]}>{t("plan.daysRange", { start: stage.startDay, end: stage.endDay })}</Text>
       </View>
       <View style={[styles.stageCard, current && styles.stageCardCurrent, locked && styles.stageCardLocked]}>
-        <View style={styles.stageTopRow}>
+        <View style={[styles.stageTopRow, directional.row]}>
           {current ? <View style={styles.currentBadge}><View style={styles.currentBadgeDot} /><Text style={styles.currentBadgeText}>{t("plan.current")}</Text></View> : completed ? <MaterialIcons name="check-circle" size={24} color="#5C7F5D" /> : <MaterialIcons name="lock-outline" size={22} color="#8C9082" />}
           {!locked && <Image source={{ uri: stageImage }} style={styles.stageIllustration} resizeMode="contain" />}
         </View>
-        <Text numberOfLines={2} style={[styles.stageTitle, locked && styles.stageMuted]}>{stage.title}</Text>
-        <Text numberOfLines={2} style={[styles.stageDescription, locked && styles.stageMuted]}>{stage.description}</Text>
+        <Text numberOfLines={2} style={[styles.stageTitle, directional.text, locked && styles.stageMuted]}>{stage.title}</Text>
+        <Text numberOfLines={2} style={[styles.stageDescription, directional.text, locked && styles.stageMuted]}>{stage.description}</Text>
       </View>
     </View>
   );
@@ -373,14 +378,15 @@ function TasksOutline({
   days: { dayNumber: number; title: string; focus: string }[];
   stages: ReturnType<typeof buildJourneyStages>;
 }) {
+  const directional = useDirectionalStyles();
   return (
     <View style={styles.tasksList}>
       {days.map((day) => {
         const state = stages.find((stage) => day.dayNumber >= stage.startDay && day.dayNumber <= stage.endDay)?.state ?? "locked";
         return (
-          <View key={day.dayNumber} style={[styles.dayTaskCard, state === "current" && styles.dayTaskCurrent, state === "locked" && styles.dayTaskLocked]}>
+          <View key={day.dayNumber} style={[styles.dayTaskCard, directional.row, state === "current" && styles.dayTaskCurrent, state === "locked" && styles.dayTaskLocked]}>
             <View style={[styles.dayTaskNumber, state === "completed" && styles.dayTaskComplete]}><Text style={styles.dayTaskNumberText}>{day.dayNumber}</Text></View>
-            <View style={styles.dayTaskCopy}><Text style={[styles.dayTaskTitle, state === "locked" && styles.stageMuted]}>{day.title}</Text><Text style={[styles.dayTaskFocus, state === "locked" && styles.stageMuted]}>{day.focus}</Text></View>
+            <View style={styles.dayTaskCopy}><Text style={[styles.dayTaskTitle, directional.text, state === "locked" && styles.stageMuted]}>{day.title}</Text><Text style={[styles.dayTaskFocus, directional.text, state === "locked" && styles.stageMuted]}>{day.focus}</Text></View>
             <MaterialIcons name={state === "completed" ? "check-circle" : state === "current" ? "play-circle-outline" : "lock-outline"} size={22} color={state === "locked" ? "#929587" : COLORS.forest} />
           </View>
         );
@@ -429,16 +435,17 @@ function EditPlanCard({
   retryPending: boolean;
 }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   return (
     <View style={styles.editCard}>
       <Image source={{ uri: EDIT_PLANT_ASSET }} style={styles.editPlant} resizeMode="contain" />
-      <View style={styles.editIntro}>
-        <Text style={styles.editTitle}>{t("plan.editTitle")}</Text>
-        <Text style={styles.editCopy}>{t("plan.editCopy")}</Text>
+      <View style={[styles.editIntro, directional.start]}>
+        <Text style={[styles.editTitle, directional.text]}>{t("plan.editTitle")}</Text>
+        <Text style={[styles.editCopy, directional.text]}>{t("plan.editCopy")}</Text>
       </View>
-      <View style={styles.editActions}>
+      <View style={[styles.editActions, directional.row]}>
         <PlanAction label={t("plan.edit")} icon="edit" onPress={onOpen} compact />
-        <Pressable onPress={onDecline} style={({ pressed }) => [styles.declineButton, pressed && styles.pressed]}>
+        <Pressable onPress={onDecline} style={({ pressed }) => [styles.declineButton, directional.row, pressed && styles.pressed]}>
           <MaterialIcons name="check-circle" size={18} color={COLORS.forest} />
           <Text style={styles.declineText}>{t("plan.declineEdit")}</Text>
         </Pressable>
@@ -448,18 +455,18 @@ function EditPlanCard({
         <View style={styles.editPanel}>
           {failedSegments.map((segment) => (
             <View key={segment.startDay} style={styles.failureRow}>
-              <Text style={styles.failureText}>{t("plan.segmentFailed", { start: segment.startDay, end: segment.endDay })}</Text>
+              <Text style={[styles.failureText, directional.text]}>{t("plan.segmentFailed", { start: segment.startDay, end: segment.endDay })}</Text>
               <PlanAction label={t("plan.retryGeneration")} icon="refresh" variant="soft" loading={retryPending} onPress={() => onRetrySegment(segment.startDay)} compact />
             </View>
           ))}
-          <Text style={styles.inputLabel}>{t("plan.adjustBounds")}</Text>
-          <View style={styles.boundsRow}>
-            <TextInput value={dailyMinutes} onChangeText={onDailyMinutesChange} placeholder={t("plan.dailyMinutesPlaceholder")} placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
-            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder={t("plan.durationPlaceholder")} placeholderTextColor="#9A968A" style={styles.boundsInput} keyboardType="number-pad" maxLength={3} />
+          <Text style={[styles.inputLabel, directional.text]}>{t("plan.adjustBounds")}</Text>
+          <View style={[styles.boundsRow, directional.row]}>
+            <TextInput value={dailyMinutes} onChangeText={onDailyMinutesChange} placeholder={t("plan.dailyMinutesPlaceholder")} placeholderTextColor="#9A968A" style={[styles.boundsInput, directional.text]} textAlign={directional.isRTL ? "right" : "left"} keyboardType="number-pad" maxLength={3} />
+            <TextInput value={durationDays} onChangeText={onDurationDaysChange} placeholder={t("plan.durationPlaceholder")} placeholderTextColor="#9A968A" style={[styles.boundsInput, directional.text]} textAlign={directional.isRTL ? "right" : "left"} keyboardType="number-pad" maxLength={3} />
           </View>
           <PlanAction label={t("plan.saveBounds")} icon="schedule" variant="soft" loading={boundsPending} disabled={!Number.isInteger(Number(dailyMinutes)) || !Number.isInteger(Number(durationDays))} onPress={onSaveBounds} />
-          <Text style={styles.inputLabel}>{t("plan.editTasksLabel")}</Text>
-          <TextInput value={editRequest} onChangeText={onEditRequestChange} placeholder={t("plan.editPlaceholder")} placeholderTextColor="#9A968A" style={styles.editInput} multiline maxLength={1500} />
+          <Text style={[styles.inputLabel, directional.text]}>{t("plan.editTasksLabel")}</Text>
+          <TextInput value={editRequest} onChangeText={onEditRequestChange} placeholder={t("plan.editPlaceholder")} placeholderTextColor="#9A968A" style={[styles.editInput, directional.text]} textAlign={directional.isRTL ? "right" : "left"} multiline maxLength={1500} />
           <PlanAction label={t("plan.updateDraft")} icon="auto-awesome" variant="soft" loading={editPending} disabled={editRequest.trim().length < 4} onPress={onEdit} />
           <PlanAction label={t("plan.approveStart")} icon="play-circle-filled" loading={approvePending} onPress={onApprove} />
         </View>

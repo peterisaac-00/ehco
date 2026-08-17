@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { type ComponentProps, useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 
 const COLORS = {
@@ -24,6 +25,7 @@ type IconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export function AuthHero({ mode }: { mode: "login" | "register" }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -33,7 +35,7 @@ export function AuthHero({ mode }: { mode: "login" | "register" }) {
     <Animated.View style={[styles.hero, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]}>
       <Image source={{ uri: LANDSCAPE }} style={styles.landscape} resizeMode="cover" />
       <AuthLandscapeFallback />
-      <View style={styles.brandMark}><View style={styles.brandIcon}><MaterialIcons name="spa" size={30} color={COLORS.forest} /></View><Text style={styles.brandText}>Echo</Text></View>
+      <View style={[styles.brandMark, directional.row]}><View style={styles.brandIcon}><MaterialIcons name="spa" size={30} color={COLORS.forest} /></View><Text style={styles.brandText}>Ehco</Text></View>
       <View style={styles.heroCopy}><Text style={styles.heroTitle}>{isLogin ? t("auth.welcomeBack") : t("auth.createAccount")}</Text><Text style={styles.heroSubtitle}>{isLogin ? t("auth.loginJourney") : t("auth.createJourney")}</Text></View>
     </Animated.View>
   );
@@ -52,41 +54,46 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
 }
 
 export function AuthField({ icon, label, help, error, ...inputProps }: TextInputProps & { icon: IconName; label: string; help?: string; error?: string }) {
+  const directional = useDirectionalStyles();
   return (
     <View style={styles.fieldWrap}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={[styles.inputShell, error && styles.inputError]}>
+      <Text style={[styles.fieldLabel, directional.text]}>{label}</Text>
+      <View style={[styles.inputShell, directional.row, error && styles.inputError]}>
         <MaterialIcons name={icon} size={22} color={error ? COLORS.error : COLORS.forestMuted} />
         <TextInput
           {...inputProps}
-          style={styles.input}
+          style={[styles.input, directional.text]}
           placeholderTextColor={COLORS.placeholder}
           accessibilityLabel={label}
           textAlign="right"
         />
       </View>
-      {error ? <View style={styles.errorNotice}><MaterialIcons name="error-outline" size={15} color={COLORS.error} /><Text style={styles.errorText}>{error}</Text></View> : help ? <Text style={styles.fieldHelp}>{help}</Text> : null}
+      {error ? <View style={[styles.errorNotice, directional.row]}><MaterialIcons name="error-outline" size={15} color={COLORS.error} /><Text style={[styles.errorText, directional.text]}>{error}</Text></View> : help ? <Text style={[styles.fieldHelp, directional.text]}>{help}</Text> : null}
     </View>
   );
 }
 
 export function PasswordRule() {
   const { t } = useLanguage();
-  return <View style={styles.passwordRule}><MaterialIcons name="check-circle" size={16} color="#5D835A" /><Text style={styles.passwordRuleText}>{t("auth.passwordRule")}</Text></View>;
+  const directional = useDirectionalStyles();
+  return <View style={[styles.passwordRule, directional.row]}><MaterialIcons name="check-circle" size={16} color="#5D835A" /><Text style={[styles.passwordRuleText, directional.text]}>{t("auth.passwordRule")}</Text></View>;
 }
 
 export function AuthErrorMessage({ message }: { message: string }) {
-  return <View style={styles.authError}><MaterialIcons name="error-outline" size={19} color={COLORS.error} /><Text style={styles.authErrorText}>{message}</Text></View>;
+  const directional = useDirectionalStyles();
+  return <View style={[styles.authError, directional.row]}><MaterialIcons name="error-outline" size={19} color={COLORS.error} /><Text style={[styles.authErrorText, directional.text]}>{message}</Text></View>;
 }
 
 export function AuthSubmitButton({ label, loading, disabled, onPress }: { label: string; loading: boolean; disabled: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled, busy: loading }} onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [styles.primaryButton, (disabled || loading) && styles.primaryButtonDisabled, pressed && !disabled && !loading && styles.pressed]}>{loading ? <ActivityIndicator size="small" color={COLORS.ivory} /> : <><MaterialIcons name="login" size={22} color={COLORS.ivory} /><Text style={styles.primaryButtonText}>{label}</Text></>}</Pressable>;
+  const directional = useDirectionalStyles();
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled, busy: loading }} onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [styles.primaryButton, directional.row, (disabled || loading) && styles.primaryButtonDisabled, pressed && !disabled && !loading && styles.pressed]}>{loading ? <ActivityIndicator size="small" color={COLORS.ivory} /> : <><MaterialIcons name="login" size={22} color={COLORS.ivory} /><Text style={styles.primaryButtonText}>{label}</Text></>}</Pressable>;
 }
 
 export function AuthSwitch({ mode, onPress }: { mode: "login" | "register"; onPress: () => void }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const isLogin = mode === "login";
-  return <View style={styles.switchRow}><Text style={styles.switchCopy}>{isLogin ? t("auth.noAccount") : t("auth.haveAccount")}</Text><Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && styles.linkPressed}><Text style={styles.switchAction}>{isLogin ? t("auth.createNew") : t("auth.login")}</Text></Pressable></View>;
+  return <View style={[styles.switchRow, directional.row]}><Text style={styles.switchCopy}>{isLogin ? t("auth.noAccount") : t("auth.haveAccount")}</Text><Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => pressed && styles.linkPressed}><Text style={styles.switchAction}>{isLogin ? t("auth.createNew") : t("auth.login")}</Text></Pressable></View>;
 }
 
 export function LifestyleDecoration() {

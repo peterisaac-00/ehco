@@ -15,6 +15,7 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { isDailyReminderEnabled } from "@/lib/daily-reminder";
+import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 
@@ -114,6 +115,7 @@ function useReminderStatus(isAuthenticated: boolean) {
 
 function CalendarHero({ reminderEnabled }: { reminderEnabled: boolean }) {
   const { t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -121,7 +123,7 @@ function CalendarHero({ reminderEnabled }: { reminderEnabled: boolean }) {
   return (
     <Animated.View style={[styles.hero, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
       <Image source={{ uri: HERO_ILLUSTRATION }} style={styles.heroIllustration} resizeMode="cover" />
-      <View style={styles.heroTopRow}>
+      <View style={[styles.heroTopRow, directional.row]}>
         <View style={styles.heroBotanical}><MaterialIcons name="spa" size={23} color={COLORS.forest} /></View>
         <Pressable accessibilityRole="button" accessibilityLabel={t("calendar.reminderSettings")} onPress={() => router.push("/(tabs)/profile")} style={({ pressed }) => [styles.heroBell, pressed && styles.iconPressed]}>
           <MaterialIcons name="notifications-none" size={25} color={COLORS.forest} />
@@ -146,28 +148,29 @@ function CalendarSurface({
   completedDays: number;
 }) {
   const { language, t } = useLanguage();
+  const directional = useDirectionalStyles();
   const currentDay = days.find((day) => getDayState(day) === "current")?.dayNumber;
   const rows = chunk(days, 7);
   const weekdayNames = language === "ar" ? ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"] : ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
   return (
     <View style={styles.calendarSurface}>
-      <View style={styles.calendarControls}>
-        <View style={styles.controlGroup}><View style={styles.controlIconMuted}><MaterialIcons name="format-list-bulleted" size={24} color={COLORS.forestMuted} /></View><View style={styles.controlIconActive}><MaterialIcons name="calendar-month" size={24} color={COLORS.forest} /></View></View>
-        <View style={styles.monthLabel}><MaterialIcons name="chevron-right" size={27} color={COLORS.forest} /><Text style={styles.monthText}>{monthLabel}</Text><MaterialIcons name="chevron-left" size={27} color={COLORS.forest} /></View>
-        <View style={styles.filterControl}><MaterialIcons name="filter-list" size={22} color={COLORS.forestMuted} /><Text style={styles.filterText}>{t("calendar.learningPath")}</Text></View>
+      <View style={[styles.calendarControls, directional.row]}>
+        <View style={[styles.controlGroup, directional.row]}><View style={styles.controlIconMuted}><MaterialIcons name="format-list-bulleted" size={24} color={COLORS.forestMuted} /></View><View style={styles.controlIconActive}><MaterialIcons name="calendar-month" size={24} color={COLORS.forest} /></View></View>
+        <View style={[styles.monthLabel, directional.row]}><MaterialIcons name={directional.isRTL ? "chevron-right" : "chevron-left"} size={27} color={COLORS.forest} /><Text style={styles.monthText}>{monthLabel}</Text><MaterialIcons name={directional.isRTL ? "chevron-left" : "chevron-right"} size={27} color={COLORS.forest} /></View>
+        <View style={[styles.filterControl, directional.row]}><MaterialIcons name="filter-list" size={22} color={COLORS.forestMuted} /><Text style={styles.filterText}>{t("calendar.learningPath")}</Text></View>
       </View>
       <View style={styles.calendarDivider} />
-      <View style={styles.weekdayRow}>{weekdayNames.map((name) => <Text key={name} style={styles.weekday}>{name}</Text>)}</View>
+      <View style={[styles.weekdayRow, directional.row]}>{weekdayNames.map((name) => <Text key={name} style={styles.weekday}>{name}</Text>)}</View>
       <View style={styles.grid}>
         {rows.map((row, index) => (
-          <View key={`week-${index}`} style={styles.gridRow}>
+          <View key={`week-${index}`} style={[styles.gridRow, directional.row]}>
             {row.map((day) => <CalendarDayCard key={day.dayNumber} day={day} />)}
             {Array.from({ length: Math.max(0, 7 - row.length) }, (_, placeholderIndex) => <View key={`empty-${placeholderIndex}`} style={styles.dayPlaceholder} />)}
           </View>
         ))}
       </View>
-      <View style={styles.legendRow}>
+      <View style={[styles.legendRow, directional.row]}>
         <LegendItem icon="lock-outline" label={t("calendar.locked")} />
         <View style={styles.legendDivider} />
         <LegendItem icon="check-circle" label={t("calendar.completed")} color="#638161" />
@@ -210,6 +213,7 @@ function CurrentTaskCard({
   totalDays: number;
 }) {
   const { language, t } = useLanguage();
+  const directional = useDirectionalStyles();
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start();
@@ -218,12 +222,12 @@ function CurrentTaskCard({
 
   return (
     <Animated.View style={[styles.taskCard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}>
-      <Image source={{ uri: TASK_ILLUSTRATION }} style={styles.taskIllustration} resizeMode="cover" />
-      <View style={styles.taskTop}>
-        <View style={styles.taskCopyBlock}>
-          <Text style={styles.taskEyebrow}>{t("calendar.todayTask")} <Text style={styles.taskLeaf}>⌁</Text></Text>
-          <Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-          <View style={styles.taskMeta}><View style={styles.categoryChip}><Text style={styles.categoryText}>{task.status === "in_quiz" ? t("home.quizActive") : t("calendar.concepts")}</Text></View><View style={styles.metaInfo}><MaterialIcons name="schedule" size={20} color={COLORS.forestMuted} /><Text style={styles.metaText}>{formatDuration(task.estimatedMinutes ?? 0, language)}</Text></View></View>
+      <Image source={{ uri: TASK_ILLUSTRATION }} style={[styles.taskIllustration, directional.isRTL ? { left: 0, right: undefined } : { left: undefined, right: 0 }]} resizeMode="cover" />
+      <View style={[styles.taskTop, directional.row]}>
+        <View style={[styles.taskCopyBlock, directional.start, directional.isRTL ? { paddingLeft: 130, paddingRight: 0 } : { paddingLeft: 0, paddingRight: 130 }]}>
+          <Text style={[styles.taskEyebrow, directional.text]}>{t("calendar.todayTask")} <Text style={styles.taskLeaf}>⌁</Text></Text>
+          <Text numberOfLines={2} style={[styles.taskTitle, directional.text]}>{task.title}</Text>
+          <View style={[styles.taskMeta, directional.row]}><View style={styles.categoryChip}><Text style={styles.categoryText}>{task.status === "in_quiz" ? t("home.quizActive") : t("calendar.concepts")}</Text></View><View style={[styles.metaInfo, directional.row]}><MaterialIcons name="schedule" size={20} color={COLORS.forestMuted} /><Text style={styles.metaText}>{formatDuration(task.estimatedMinutes ?? 0, language)}</Text></View></View>
         </View>
         <View style={styles.progressCircle}><Text style={styles.progressValue}>{journeyPercent}%</Text><Text style={styles.progressLabel}>{t("calendar.yourProgress")}</Text></View>
       </View>
@@ -233,7 +237,8 @@ function CurrentTaskCard({
 }
 
 function LegendItem({ icon, label, color = COLORS.warmGray }: { icon: IconName; label: string; color?: string }) {
-  return <View style={styles.legendItem}><MaterialIcons name={icon} size={18} color={color} /><Text style={[styles.legendText, { color }]}>{label}</Text></View>;
+  const directional = useDirectionalStyles();
+  return <View style={[styles.legendItem, directional.row]}><MaterialIcons name={icon} size={18} color={color} /><Text style={[styles.legendText, { color }]}>{label}</Text></View>;
 }
 
 function CalendarEntry({ title, copy, label, icon, onPress, error = false }: { title: string; copy: string; label: string; icon: IconName; onPress: () => void; error?: boolean }) {
@@ -271,8 +276,9 @@ function CalendarAction({
   variant?: "primary" | "soft";
   style?: object;
 }) {
+  const directional = useDirectionalStyles();
   const soft = variant === "soft";
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.calendarAction, soft ? styles.actionSoft : styles.actionPrimary, style, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color={soft ? COLORS.forest : COLORS.ivory} /><Text style={[styles.actionText, soft ? styles.actionTextSoft : styles.actionTextPrimary]}>{label}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.calendarAction, directional.row, soft ? styles.actionSoft : styles.actionPrimary, style, pressed && styles.pressed]}><MaterialIcons name={icon} size={20} color={soft ? COLORS.forest : COLORS.ivory} /><Text style={[styles.actionText, soft ? styles.actionTextSoft : styles.actionTextPrimary]}>{label}</Text></Pressable>;
 }
 
 function groupDays(tasks: CalendarTask[]) {
