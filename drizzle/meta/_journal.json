@@ -50,6 +50,13 @@
       "when": 1786716253453,
       "tag": "0006_far_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787002090497,
+      "tag": "0007_aspiring_mathemanic",
+      "breakpoints": true
     }
   ]
 }

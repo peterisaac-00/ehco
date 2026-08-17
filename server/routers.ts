@@ -3,7 +3,7 @@ import { contentLanguageSchema, createGoalInputSchema, planBoundsInputSchema, pl
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline } from "./learning-ai";
+import { generateCurriculumBlueprint, generatePlanOutline, generatePlanSegment, LEARNING_MODEL, PROMPT_VERSION, regeneratePlanOutlineForBounds, revisePlanOutline } from "./learning-ai";
 import { hashPassword, normalizeUsername, verifyPassword } from "./local-auth";
 import { logServerError } from "./observability";
 import { sdk } from "./_core/sdk";
@@ -39,6 +39,7 @@ async function preparePlanSegment(userId: number, planId: number, startDay: numb
   const segment = await generatePlanSegment({
     goal: { ...reservation.goal, language },
     outline: reservation.plan.draftJson,
+    curriculumBlueprint: reservation.plan.curriculumJson,
     startDay: reservation.segment.startDay,
     endDay: reservation.segment.endDay,
   });
@@ -126,11 +127,14 @@ export const appRouter = router({
         }
 
         const language = await learningDb.getUserLanguage(ctx.user.id);
-        const outline = await generatePlanOutline({ ...goal, language });
+        const goalContext = { ...goal, language };
+        const curriculumBlueprint = await generateCurriculumBlueprint(goalContext);
+        const outline = await generatePlanOutline(goalContext, curriculumBlueprint);
         const planId = await learningDb.saveDraftPlan({
           userId: ctx.user.id,
           goalId: input.goalId,
           draft: outline,
+          curriculumBlueprint,
           aiModel: LEARNING_MODEL,
           promptVersion: PROMPT_VERSION,
         });
@@ -178,7 +182,7 @@ export const appRouter = router({
         if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "مسودة الخطة غير موجودة." });
         if (record.plan.status !== "draft") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "لا يمكن تعديل خطة تم اعتمادها." });
         const language = await learningDb.getUserLanguage(ctx.user.id);
-        const revision = await revisePlanOutline({ goal: { ...record.goal, language }, currentOutline: record.plan.draftJson, request: input.request });
+        const revision = await revisePlanOutline({ goal: { ...record.goal, language }, currentOutline: record.plan.draftJson, curriculumBlueprint: record.plan.curriculumJson, request: input.request });
         await learningDb.savePlanEdit({
           userId: ctx.user.id,
           planId: input.planId,
@@ -193,6 +197,7 @@ export const appRouter = router({
           const segment = await generatePlanSegment({
             goal: { ...reservation.goal, language },
             outline: revision.outline,
+            curriculumBlueprint: reservation.plan.curriculumJson,
             startDay: reservation.segment.startDay,
             endDay: reservation.segment.endDay,
           });
@@ -216,6 +221,7 @@ export const appRouter = router({
         const outline = await regeneratePlanOutlineForBounds({
           goal: { ...record.goal, language },
           currentOutline: record.plan.draftJson,
+          curriculumBlueprint: record.plan.curriculumJson,
           dailyMinutes: input.dailyMinutes,
           durationDays: input.durationDays,
         });

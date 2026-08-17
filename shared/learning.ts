@@ -30,6 +30,23 @@ export const planBoundsInputSchema = z.object({
   durationDays: z.number().int().min(LEARNING_LIMITS.minDurationDays).max(LEARNING_LIMITS.maxDurationDays),
 });
 
+/**
+ * A validated, non-user-visible curriculum brief created once by Gemini before
+ * a plan is generated. It guides later outline, task, and quiz generation.
+ */
+export const curriculumBlueprintSchema = z.object({
+  domain: z.string().trim().min(2).max(120),
+  learnerStartingPoint: z.string().trim().min(10).max(800),
+  targetCapabilities: z.array(z.string().trim().min(3).max(280)).min(3).max(8),
+  progressionPrinciples: z.array(z.string().trim().min(3).max(360)).min(3).max(8),
+  practiceApproach: z.array(z.string().trim().min(3).max(300)).min(3).max(8),
+  reviewStrategy: z.string().trim().min(10).max(500),
+  assessmentApproach: z.string().trim().min(10).max(500),
+  pacingGuidance: z.string().trim().min(10).max(500),
+  avoid: z.array(z.string().trim().min(3).max(300)).min(2).max(8),
+});
+export type CurriculumBlueprint = z.infer<typeof curriculumBlueprintSchema>;
+
 export type StudyBounds = {
   minDurationDays: number;
   maxDurationDays: number;

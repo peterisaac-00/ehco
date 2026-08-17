@@ -20,6 +20,7 @@ const db = vi.hoisted(() => ({
 }));
 
 const ai = vi.hoisted(() => ({
+  generateCurriculumBlueprint: vi.fn(),
   generatePlanSegment: vi.fn(),
   regeneratePlanOutlineForBounds: vi.fn(),
   generatePlanOutline: vi.fn(),
@@ -51,6 +52,18 @@ const outline = {
   days: Array.from({ length: 30 }, (_, index) => ({ dayNumber: index + 1, title: `Day ${index + 1}`, focus: "Practice" })),
 };
 
+const curriculumBlueprint = {
+  domain: "English communication",
+  learnerStartingPoint: "A beginner needs practical foundations.",
+  targetCapabilities: ["Understand common phrases", "Communicate in everyday exchanges", "Write short messages"],
+  progressionPrinciples: ["Build foundations first", "Practise in context", "Increase independence"],
+  practiceApproach: ["Active recall", "Guided production", "Application"],
+  reviewStrategy: "Revisit material after delays and in new contexts.",
+  assessmentApproach: "Assess practical use of the target skill.",
+  pacingGuidance: "Use one achievable objective within the daily budget.",
+  avoid: ["Generic tasks", "Unrealistic promises"],
+};
+
 const ownedDraft = {
   plan: {
     id: 44,
@@ -59,6 +72,7 @@ const ownedDraft = {
     dailyMinutes: 60,
     totalEstimatedMinutes: 1_800,
     draftJson: outline,
+    curriculumJson: curriculumBlueprint,
     editCount: 0,
   },
   goal: {
@@ -129,13 +143,13 @@ describe("MVP router business rules", () => {
 
   it("7. prepares and unlocks the first task of segment two", async () => {
     db.getUserLanguage.mockResolvedValue("en");
-    db.reserveSegmentGeneration.mockResolvedValue({ state: "reserved", plan: { draftJson: outline }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
+    db.reserveSegmentGeneration.mockResolvedValue({ state: "reserved", plan: { draftJson: outline, curriculumJson: curriculumBlueprint }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
     ai.generatePlanSegment.mockResolvedValue({ startDay: 8, endDay: 14, days: [] });
     db.savePlanSegment.mockResolvedValue(8);
     db.unlockSegmentStart.mockResolvedValue(true);
     await expect(callerFor().plans.retrySegment({ planId: 44, startDay: 8 })).resolves.toMatchObject({ alreadyGenerated: false, startDay: 8, nextTaskUnlocked: true });
     expect(db.savePlanSegment).toHaveBeenCalledTimes(1);
-    expect(ai.generatePlanSegment).toHaveBeenCalledWith(expect.objectContaining({ goal: expect.objectContaining({ language: "en" }) }));
+    expect(ai.generatePlanSegment).toHaveBeenCalledWith(expect.objectContaining({ goal: expect.objectContaining({ language: "en" }), curriculumBlueprint }));
   });
 
   it("stores and returns the account language preference", async () => {
@@ -147,14 +161,14 @@ describe("MVP router business rules", () => {
 
   it("8. records a recoverable segment-generation failure", async () => {
     const generationFailure = new Error("provider timeout");
-    db.reserveSegmentGeneration.mockResolvedValue({ state: "reserved", plan: { draftJson: outline }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
+    db.reserveSegmentGeneration.mockResolvedValue({ state: "reserved", plan: { draftJson: outline, curriculumJson: curriculumBlueprint }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
     ai.generatePlanSegment.mockRejectedValue(generationFailure);
     await expect(callerFor().plans.retrySegment({ planId: 44, startDay: 8 })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     expect(db.markSegmentGenerationFailed).toHaveBeenCalledWith(1, 44, 8, generationFailure);
   });
 
   it("9. treats a retry after partial success as idempotent and does not save a duplicate segment", async () => {
-    db.reserveSegmentGeneration.mockResolvedValue({ state: "generated", plan: { draftJson: outline }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
+    db.reserveSegmentGeneration.mockResolvedValue({ state: "generated", plan: { draftJson: outline, curriculumJson: curriculumBlueprint }, goal: ownedDraft.goal, segment: { startDay: 8, endDay: 14 } });
     db.unlockSegmentStart.mockResolvedValue(true);
     await expect(callerFor().plans.retrySegment({ planId: 44, startDay: 8 })).resolves.toMatchObject({ alreadyGenerated: true, nextTaskUnlocked: true });
     expect(ai.generatePlanSegment).not.toHaveBeenCalled();
@@ -165,7 +179,7 @@ describe("MVP router business rules", () => {
     db.getPlanById.mockResolvedValue(ownedDraft);
     ai.regeneratePlanOutlineForBounds.mockResolvedValue(outline);
     db.updateDraftPlanBounds.mockResolvedValue({ bounds: { minDurationDays: 4, maxDurationDays: 30, totalEstimatedMinutes: 1_800 } });
-    db.reserveSegmentGeneration.mockResolvedValue({ state: "generated", plan: { draftJson: outline }, goal: ownedDraft.goal, segment: { startDay: 1, endDay: 7 } });
+    db.reserveSegmentGeneration.mockResolvedValue({ state: "generated", plan: { draftJson: outline, curriculumJson: curriculumBlueprint }, goal: ownedDraft.goal, segment: { startDay: 1, endDay: 7 } });
     await expect(callerFor().plans.updateBounds({ planId: 44, dailyMinutes: 60, durationDays: 30 })).resolves.toMatchObject({ firstSegmentReady: true });
     expect(db.updateDraftPlanBounds).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, planId: 44, dailyMinutes: 60, durationDays: 30 }));
   });
@@ -185,5 +199,19 @@ describe("MVP router business rules", () => {
     await expect(callerFor().plans.approve({ goalId: 9 })).resolves.toEqual({ planId: 44, taskCount: 7 });
     expect(db.approvePlan).toHaveBeenNthCalledWith(1, 1, 9);
     expect(db.approvePlan).toHaveBeenNthCalledWith(2, 1, 9);
+  });
+
+  it("creates, persists, and reuses one curriculum blueprint when generating a new plan", async () => {
+    db.getGoalById.mockResolvedValue(ownedDraft.goal);
+    db.getPlanForGoal.mockResolvedValue(null);
+    db.getUserLanguage.mockResolvedValue("ar");
+    ai.generateCurriculumBlueprint.mockResolvedValue(curriculumBlueprint);
+    ai.generatePlanOutline.mockResolvedValue(outline);
+    db.saveDraftPlan.mockResolvedValue(44);
+    db.reserveSegmentGeneration.mockResolvedValue({ state: "generated", plan: { draftJson: outline, curriculumJson: curriculumBlueprint }, goal: ownedDraft.goal, segment: { startDay: 1, endDay: 7 } });
+
+    await expect(callerFor().plans.generateInitial({ goalId: 9 })).resolves.toMatchObject({ planId: 44, firstSegmentReady: true });
+    expect(ai.generatePlanOutline).toHaveBeenCalledWith(expect.objectContaining({ language: "ar" }), curriculumBlueprint);
+    expect(db.saveDraftPlan).toHaveBeenCalledWith(expect.objectContaining({ curriculumBlueprint, promptVersion: "test" }));
   });
 });

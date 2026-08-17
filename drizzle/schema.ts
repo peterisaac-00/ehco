@@ -1,5 +1,5 @@
 import { boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import type { LearningPlanOutline, LearningPlanSegment, QuizQuestion } from "../shared/learning";
+import type { CurriculumBlueprint, LearningPlanOutline, LearningPlanSegment, QuizQuestion } from "../shared/learning";
 
 /**
  * Core user table backing auth flow.
@@ -63,6 +63,8 @@ export const plans = mysqlTable("plans", {
   status: mysqlEnum("status", ["draft", "approved"]).notNull().default("draft"),
   /** Outline only: detailed tasks and quizzes belong to planSegments. */
   draftJson: json("draftJson").$type<LearningPlanOutline>().notNull(),
+  /** Persisted validated curriculum brief reused when generating all later segments. */
+  curriculumJson: json("curriculumJson").$type<CurriculumBlueprint | null>(),
   aiModel: varchar("aiModel", { length: 100 }).notNull(),
   promptVersion: varchar("promptVersion", { length: 40 }).notNull(),
   totalEstimatedMinutes: int("totalEstimatedMinutes").notNull().default(0),

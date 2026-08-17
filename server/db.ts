@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, validateStudyBounds, varyQuizQuestions, type ContentLanguage, type CreateGoalInput, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
+import { calculateQuizScore, createPlanSegments, LEARNING_LIMITS, validateStudyBounds, varyQuizQuestions, type ContentLanguage, type CreateGoalInput, type CurriculumBlueprint, type LearningPlanOutline, type LearningPlanSegment } from "../shared/learning";
 import {
   goals,
   localCredentials,
@@ -191,6 +191,7 @@ export async function saveDraftPlan(input: {
   userId: number;
   goalId: number;
   draft: LearningPlanOutline;
+  curriculumBlueprint?: CurriculumBlueprint | null;
   aiModel: string;
   promptVersion: string;
 }) {
@@ -210,6 +211,7 @@ export async function saveDraftPlan(input: {
         dailyMinutes: input.draft.dailyMinutes,
         totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
         draftJson: input.draft,
+        curriculumJson: input.curriculumBlueprint ?? existing.plan.curriculumJson,
         aiModel: input.aiModel,
         promptVersion: input.promptVersion,
         generationCount: existing.plan.generationCount + 1,
@@ -227,6 +229,7 @@ export async function saveDraftPlan(input: {
       dailyMinutes: input.draft.dailyMinutes,
       totalEstimatedMinutes: input.draft.totalDurationDays * input.draft.dailyMinutes,
       draftJson: input.draft,
+      curriculumJson: input.curriculumBlueprint ?? null,
       aiModel: input.aiModel,
       promptVersion: input.promptVersion,
     });
