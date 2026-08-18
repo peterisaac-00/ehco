@@ -40,9 +40,11 @@ export default function QuizScreen() {
   const directional = useDirectionalStyles();
   const params = useLocalSearchParams<{ taskId: string }>();
   const taskId = Number(params.taskId);
+  const hasValidTaskId = Number.isInteger(taskId) && taskId > 0;
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<QuizOutcome | null>(null);
   const [stage, setStage] = useState<"lesson" | "quiz">("lesson");
+  const [hasAttemptedOpen, setHasAttemptedOpen] = useState(false);
   const entrance = useRef(new Animated.Value(0)).current;
   const progressAnimation = useRef(new Animated.Value(0)).current;
   const utils = trpc.useUtils();
@@ -64,8 +66,11 @@ export default function QuizScreen() {
   });
 
   useEffect(() => {
-    if (Number.isInteger(taskId) && taskId > 0 && !beginQuiz.isPending && !beginQuiz.data && !beginQuiz.isError) beginQuiz.mutate({ taskId });
-  }, [taskId, beginQuiz]);
+    if (hasValidTaskId && !beginQuiz.isPending && !beginQuiz.data && !beginQuiz.isError) {
+      setHasAttemptedOpen(true);
+      beginQuiz.mutate({ taskId });
+    }
+  }, [taskId, hasValidTaskId, beginQuiz]);
 
   const questions = useMemo(() => beginQuiz.data?.questions ?? [], [beginQuiz.data]);
   const answeredCount = useMemo(() => questions.filter((question) => answers[question.id]).length, [answers, questions]);
@@ -93,11 +98,15 @@ export default function QuizScreen() {
     isPending: beginQuiz.isPending,
     isError: beginQuiz.isError,
     hasQuizData: Boolean(beginQuiz.data),
+    hasAttempted: hasAttemptedOpen,
+    hasValidTaskId,
   });
 
   if (entryState === "error") {
     return <QuizOpenError onRetry={() => {
+      if (!hasValidTaskId) return;
       beginQuiz.reset();
+      setHasAttemptedOpen(true);
       beginQuiz.mutate({ taskId });
     }} />;
   }

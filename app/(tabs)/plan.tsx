@@ -20,6 +20,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { useDirectionalStyles } from "@/lib/directional-styles";
 import { useLanguage } from "@/lib/i18n";
+import { buildJourneyStages } from "@/lib/plan-journey";
 import { trpc } from "@/lib/trpc";
 
 const COLORS = {
@@ -45,9 +46,6 @@ const STAGE_ASSETS = [
 const EDIT_PLANT_ASSET = "/manus-storage/ehco-plan-edit-plant_1fdeb926.png";
 
 type IconName = ComponentProps<typeof MaterialIcons>["name"];
-type ViewMode = "overview" | "tasks";
-type JourneyState = "completed" | "current" | "planned" | "locked";
-
 export default function PlanScreen() {
   const { isAuthenticated } = useAuth();
   const { t } = useLanguage();
@@ -63,7 +61,6 @@ export default function PlanScreen() {
     { planId: plan.data?.id ?? 0 },
     { enabled: Boolean(plan.data?.id) },
   );
-  const [viewMode, setViewMode] = useState<ViewMode>("overview");
   const [editExpanded, setEditExpanded] = useState(false);
   const [editRequest, setEditRequest] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
@@ -175,13 +172,7 @@ export default function PlanScreen() {
               durationDays={plan.data?.totalDurationDays ?? activeGoal.data.targetDurationDays}
             />
 
-            <ViewSwitcher viewMode={viewMode} onChange={setViewMode} />
-
-            {viewMode === "overview" ? (
-              <JourneyTimeline stages={stages} />
-            ) : (
-              <TasksOutline days={draft.days} stages={stages} />
-            )}
+            <JourneyTimeline stages={stages} />
 
             {isDraft ? (
               <EditPlanCard
@@ -306,21 +297,6 @@ function PlanSummaryCard({
   );
 }
 
-function ViewSwitcher({ viewMode, onChange }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void }) {
-  const { t } = useLanguage();
-  const directional = useDirectionalStyles();
-  return (
-    <View style={[styles.switcher, directional.row]}>
-      <Pressable accessibilityRole="tab" accessibilityState={{ selected: viewMode === "tasks" }} onPress={() => onChange("tasks")} style={[styles.switchTab, viewMode === "tasks" && styles.switchTabActive]}>
-        <Text style={[styles.switchText, viewMode === "tasks" && styles.switchTextActive]}>{t("plan.tasks")}</Text>
-      </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityState={{ selected: viewMode === "overview" }} onPress={() => onChange("overview")} style={[styles.switchTab, viewMode === "overview" && styles.switchTabActive]}>
-        <Text style={[styles.switchText, viewMode === "overview" && styles.switchTextActive]}>{t("plan.overview")}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 function JourneyTimeline({ stages }: { stages: ReturnType<typeof buildJourneyStages> }) {
   return (
     <View style={styles.timeline}>
@@ -367,30 +343,6 @@ function JourneyStageCard({
         <Text numberOfLines={2} style={[styles.stageTitle, directional.text, locked && styles.stageMuted]}>{stage.title}</Text>
         <Text numberOfLines={2} style={[styles.stageDescription, directional.text, locked && styles.stageMuted]}>{stage.description}</Text>
       </View>
-    </View>
-  );
-}
-
-function TasksOutline({
-  days,
-  stages,
-}: {
-  days: { dayNumber: number; title: string; focus: string }[];
-  stages: ReturnType<typeof buildJourneyStages>;
-}) {
-  const directional = useDirectionalStyles();
-  return (
-    <View style={styles.tasksList}>
-      {days.map((day) => {
-        const state = stages.find((stage) => day.dayNumber >= stage.startDay && day.dayNumber <= stage.endDay)?.state ?? "locked";
-        return (
-          <View key={day.dayNumber} style={[styles.dayTaskCard, directional.row, state === "current" && styles.dayTaskCurrent, state === "locked" && styles.dayTaskLocked]}>
-            <View style={[styles.dayTaskNumber, state === "completed" && styles.dayTaskComplete]}><Text style={styles.dayTaskNumberText}>{day.dayNumber}</Text></View>
-            <View style={styles.dayTaskCopy}><Text style={[styles.dayTaskTitle, directional.text, state === "locked" && styles.stageMuted]}>{day.title}</Text><Text style={[styles.dayTaskFocus, directional.text, state === "locked" && styles.stageMuted]}>{day.focus}</Text></View>
-            <MaterialIcons name={state === "completed" ? "check-circle" : state === "current" ? "play-circle-outline" : state === "planned" ? "flag" : "lock-outline"} size={22} color={state === "locked" ? "#929587" : COLORS.forest} />
-          </View>
-        );
-      })}
     </View>
   );
 }
@@ -567,30 +519,6 @@ function PlanAction({
   );
 }
 
-function buildJourneyStages(
-  days: { dayNumber: number; title: string; focus: string }[],
-  calendarTasks: { dayNumber: number; status: string }[],
-  isDraft: boolean,
-) {
-  if (days.length === 0) return [];
-  const stageCount = Math.min(5, days.length);
-  const groupSize = Math.ceil(days.length / stageCount);
-  const currentTaskDay = calendarTasks.find((task) => task.status === "unlocked" || task.status === "in_quiz")?.dayNumber;
-
-  return Array.from({ length: stageCount }, (_, index) => {
-    const group = days.slice(index * groupSize, (index + 1) * groupSize);
-    const startDay = group[0].dayNumber;
-    const endDay = group[group.length - 1].dayNumber;
-    const stageTasks = calendarTasks.filter((task) => task.dayNumber >= startDay && task.dayNumber <= endDay);
-    const groupedDays = new Set(stageTasks.map((task) => task.dayNumber));
-    const fullyComplete = groupedDays.size === group.length && stageTasks.length > 0 && stageTasks.every((task) => task.status === "completed");
-    const current = !isDraft && Boolean(currentTaskDay && currentTaskDay >= startDay && currentTaskDay <= endDay);
-    const planned = isDraft && index === 0;
-    const state: JourneyState = fullyComplete ? "completed" : current ? "current" : planned ? "planned" : "locked";
-    return { id: `${startDay}-${endDay}`, startDay, endDay, title: group[0].title, description: group[0].focus, state };
-  });
-}
-
 function formatStudyTime(minutes: number, language: "ar" | "en") {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
@@ -629,12 +557,6 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", backgroundColor: COLORS.forest, borderRadius: 6 },
   summaryLeaf: { position: "absolute", right: 11, bottom: -4, opacity: 0.86 },
 
-  switcher: { flexDirection: "row-reverse", alignSelf: "center", borderRadius: 24, padding: 4, backgroundColor: "#F5F2EB", borderWidth: 1, borderColor: "#ECE7DE" },
-  switchTab: { minWidth: 125, minHeight: 46, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  switchTabActive: { backgroundColor: COLORS.forest, shadowColor: "#42503E", shadowOpacity: 0.12, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  switchText: { color: COLORS.warmGray, fontSize: 15, fontWeight: "700" },
-  switchTextActive: { color: COLORS.ivory },
-
   timeline: { marginHorizontal: 18, gap: 0 },
   timelineRow: { flexDirection: "row", minHeight: 151 },
   timelineRail: { width: 42, alignItems: "center" },
@@ -664,17 +586,6 @@ const styles = StyleSheet.create({
   plannedBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 5, borderRadius: 12, backgroundColor: "#E8EBDD", paddingHorizontal: 8, paddingVertical: 5 },
   plannedBadgeText: { color: COLORS.forest, fontSize: 11, fontWeight: "800" },
   stageMuted: { color: "#85897E" },
-
-  tasksList: { marginHorizontal: 18, gap: 10 },
-  dayTaskCard: { flexDirection: "row-reverse", alignItems: "center", gap: 12, padding: 15, borderRadius: 19, backgroundColor: COLORS.card },
-  dayTaskCurrent: { borderWidth: 1.5, borderColor: "#90A582" },
-  dayTaskLocked: { backgroundColor: COLORS.future, opacity: 0.72 },
-  dayTaskNumber: { width: 37, height: 37, borderRadius: 19, backgroundColor: "#EDF0E5", alignItems: "center", justifyContent: "center" },
-  dayTaskComplete: { backgroundColor: "#638161" },
-  dayTaskNumberText: { color: COLORS.forest, fontSize: 13, fontWeight: "800" },
-  dayTaskCopy: { flex: 1, gap: 3 },
-  dayTaskTitle: { color: COLORS.forest, fontSize: 16, fontWeight: "800", textAlign: "right" },
-  dayTaskFocus: { color: COLORS.forestMuted, fontSize: 12, lineHeight: 18, textAlign: "right" },
 
   editCard: { position: "relative", overflow: "hidden", marginHorizontal: 18, borderRadius: 27, padding: 20, backgroundColor: COLORS.card, gap: 14, shadowColor: "#5E5748", shadowOpacity: 0.06, shadowRadius: 13, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   editPlant: { position: "absolute", left: -7, bottom: 1, width: 124, height: 124, opacity: 0.98 },

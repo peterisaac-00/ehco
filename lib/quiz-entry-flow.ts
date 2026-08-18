@@ -5,12 +5,16 @@ export function getQuizEntryState({
   isPending,
   isError,
   hasQuizData,
+  hasAttempted,
+  hasValidTaskId,
 }: {
   isPending: boolean;
   isError: boolean;
   hasQuizData: boolean;
+  hasAttempted: boolean;
+  hasValidTaskId: boolean;
 }): QuizEntryState {
-  if (isError) return "error";
-  if (isPending || !hasQuizData) return "loading";
+  if (!hasValidTaskId || isError || (hasAttempted && !isPending && !hasQuizData)) return "error";
+  if (!hasAttempted || isPending || !hasQuizData) return "loading";
   return "lesson";
 }
