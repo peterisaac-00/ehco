@@ -46,7 +46,7 @@ const EDIT_PLANT_ASSET = "/manus-storage/ehco-plan-edit-plant_1fdeb926.png";
 
 type IconName = ComponentProps<typeof MaterialIcons>["name"];
 type ViewMode = "overview" | "tasks";
-type JourneyState = "completed" | "current" | "locked";
+type JourneyState = "completed" | "current" | "planned" | "locked";
 
 export default function PlanScreen() {
   const { isAuthenticated } = useAuth();
@@ -167,10 +167,10 @@ export default function PlanScreen() {
           />
         ) : (
           <>
-            <PlanSummaryCard
+              <PlanSummaryCard
               goalTitle={activeGoal.data.title}
               progress={progress}
-              totalTasks={totalTasks}
+              isDraft={isDraft}
               dailyMinutes={activeGoal.data.dailyMinutes}
               durationDays={plan.data?.totalDurationDays ?? activeGoal.data.targetDurationDays}
             />
@@ -257,13 +257,13 @@ function PlanHero({ onOpenActions }: { onOpenActions: () => void }) {
 function PlanSummaryCard({
   goalTitle,
   progress,
-  totalTasks,
+  isDraft,
   dailyMinutes,
   durationDays,
 }: {
   goalTitle: string;
   progress: number;
-  totalTasks: number;
+  isDraft: boolean;
   dailyMinutes: number;
   durationDays: number;
 }) {
@@ -274,8 +274,7 @@ function PlanSummaryCard({
     Animated.timing(fill, { toValue: progress, duration: 450, useNativeDriver: false }).start();
   }, [fill, progress]);
   const stats: { icon: IconName; label: string; value: string }[] = [
-    { icon: "trending-up", label: t("plan.progress"), value: `${progress}%` },
-    { icon: "format-list-bulleted", label: t("plan.totalTasks"), value: totalTasks > 0 ? String(totalTasks) : "—" },
+    ...(isDraft ? [{ icon: "pending-actions" as IconName, label: t("plan.status"), value: t("plan.awaitingApproval") }] : [{ icon: "trending-up" as IconName, label: t("plan.progress"), value: `${progress}%` }]),
     { icon: "schedule", label: t("profile.dailyTime"), value: formatStudyTime(dailyMinutes, language) },
     { icon: "event-note", label: t("plan.duration"), value: t("common.days", { count: durationDays }) },
   ];
@@ -299,9 +298,9 @@ function PlanSummaryCard({
           </View>
         ))}
       </View>
-      <View style={styles.progressTrack}>
+      {!isDraft && <View style={styles.progressTrack}>
         <Animated.View style={[styles.progressFill, { width: fill.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }) }]} />
-      </View>
+      </View>}
       <View style={styles.summaryLeaf}><MaterialIcons name="local-florist" size={32} color="#6F8B67" /></View>
     </View>
   );
@@ -345,13 +344,14 @@ function JourneyStageCard({
   const directional = useDirectionalStyles();
   const completed = stage.state === "completed";
   const current = stage.state === "current";
+  const planned = stage.state === "planned";
   const locked = stage.state === "locked";
   const stageImage = STAGE_ASSETS[index % STAGE_ASSETS.length];
   return (
     <View style={[styles.timelineRow, directional.row]}>
       <View style={styles.timelineRail}>
-        <View style={[styles.timelineMarker, completed && styles.markerCompleted, current && styles.markerCurrent, locked && styles.markerLocked]}>
-          {completed ? <MaterialIcons name="check" size={18} color={COLORS.ivory} /> : current ? <View style={styles.currentCore} /> : <MaterialIcons name="lock-outline" size={15} color={COLORS.warmGray} />}
+        <View style={[styles.timelineMarker, completed && styles.markerCompleted, current && styles.markerCurrent, planned && styles.markerPlanned, locked && styles.markerLocked]}>
+          {completed ? <MaterialIcons name="check" size={18} color={COLORS.ivory} /> : current ? <View style={styles.currentCore} /> : planned ? <MaterialIcons name="flag" size={17} color={COLORS.forest} /> : <MaterialIcons name="lock-outline" size={15} color={COLORS.warmGray} />}
         </View>
         {!isLast && <View style={[styles.timelineLine, locked && styles.timelineLineDashed, completed && styles.timelineLineCompleted]} />}
       </View>
@@ -359,9 +359,9 @@ function JourneyStageCard({
         <Text style={[styles.stageNumber, locked && styles.stageMuted]}>0{index + 1}</Text>
         <Text style={[styles.stageRange, locked && styles.stageMuted]}>{t("plan.daysRange", { start: stage.startDay, end: stage.endDay })}</Text>
       </View>
-      <View style={[styles.stageCard, current && styles.stageCardCurrent, locked && styles.stageCardLocked]}>
+      <View style={[styles.stageCard, current && styles.stageCardCurrent, planned && styles.stageCardPlanned, locked && styles.stageCardLocked]}>
         <View style={[styles.stageTopRow, directional.row]}>
-          {current ? <View style={styles.currentBadge}><View style={styles.currentBadgeDot} /><Text style={styles.currentBadgeText}>{t("plan.current")}</Text></View> : completed ? <MaterialIcons name="check-circle" size={24} color="#5C7F5D" /> : <MaterialIcons name="lock-outline" size={22} color="#8C9082" />}
+          {current ? <View style={styles.currentBadge}><View style={styles.currentBadgeDot} /><Text style={styles.currentBadgeText}>{t("plan.current")}</Text></View> : planned ? <View style={styles.plannedBadge}><MaterialIcons name="flag" size={14} color={COLORS.forest} /><Text style={styles.plannedBadgeText}>{t("plan.startOfPlan")}</Text></View> : completed ? <MaterialIcons name="check-circle" size={24} color="#5C7F5D" /> : <MaterialIcons name="lock-outline" size={22} color="#8C9082" />}
           {!locked && <Image source={{ uri: stageImage }} style={styles.stageIllustration} resizeMode="contain" />}
         </View>
         <Text numberOfLines={2} style={[styles.stageTitle, directional.text, locked && styles.stageMuted]}>{stage.title}</Text>
@@ -387,7 +387,7 @@ function TasksOutline({
           <View key={day.dayNumber} style={[styles.dayTaskCard, directional.row, state === "current" && styles.dayTaskCurrent, state === "locked" && styles.dayTaskLocked]}>
             <View style={[styles.dayTaskNumber, state === "completed" && styles.dayTaskComplete]}><Text style={styles.dayTaskNumberText}>{day.dayNumber}</Text></View>
             <View style={styles.dayTaskCopy}><Text style={[styles.dayTaskTitle, directional.text, state === "locked" && styles.stageMuted]}>{day.title}</Text><Text style={[styles.dayTaskFocus, directional.text, state === "locked" && styles.stageMuted]}>{day.focus}</Text></View>
-            <MaterialIcons name={state === "completed" ? "check-circle" : state === "current" ? "play-circle-outline" : "lock-outline"} size={22} color={state === "locked" ? "#929587" : COLORS.forest} />
+            <MaterialIcons name={state === "completed" ? "check-circle" : state === "current" ? "play-circle-outline" : state === "planned" ? "flag" : "lock-outline"} size={22} color={state === "locked" ? "#929587" : COLORS.forest} />
           </View>
         );
       })}
@@ -584,8 +584,9 @@ function buildJourneyStages(
     const stageTasks = calendarTasks.filter((task) => task.dayNumber >= startDay && task.dayNumber <= endDay);
     const groupedDays = new Set(stageTasks.map((task) => task.dayNumber));
     const fullyComplete = groupedDays.size === group.length && stageTasks.length > 0 && stageTasks.every((task) => task.status === "completed");
-    const current = isDraft ? index === 0 : Boolean(currentTaskDay && currentTaskDay >= startDay && currentTaskDay <= endDay);
-    const state: JourneyState = fullyComplete ? "completed" : current ? "current" : "locked";
+    const current = !isDraft && Boolean(currentTaskDay && currentTaskDay >= startDay && currentTaskDay <= endDay);
+    const planned = isDraft && index === 0;
+    const state: JourneyState = fullyComplete ? "completed" : current ? "current" : planned ? "planned" : "locked";
     return { id: `${startDay}-${endDay}`, startDay, endDay, title: group[0].title, description: group[0].focus, state };
   });
 }
@@ -640,6 +641,7 @@ const styles = StyleSheet.create({
   timelineMarker: { width: 37, height: 37, borderRadius: 19, zIndex: 2, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.ivory, borderWidth: 2, borderColor: "#C1C7B7" },
   markerCompleted: { backgroundColor: "#638161", borderColor: "#638161" },
   markerCurrent: { width: 47, height: 47, borderRadius: 24, marginTop: -5, backgroundColor: "#E2E7D8", borderColor: "#D1DAC5", shadowColor: "#5B7054", shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  markerPlanned: { backgroundColor: "#E8EBDD", borderColor: "#C9D4C0" },
   markerLocked: { borderStyle: "dashed", backgroundColor: "#FAF9F4" },
   currentCore: { width: 22, height: 22, borderRadius: 12, backgroundColor: COLORS.forest },
   timelineLine: { position: "absolute", top: 37, bottom: -3, width: 2, backgroundColor: "#BBC8B1" },
@@ -650,6 +652,7 @@ const styles = StyleSheet.create({
   stageRange: { color: COLORS.forestMuted, fontSize: 11, fontWeight: "600", textAlign: "right" },
   stageCard: { flex: 1, minHeight: 126, marginBottom: 18, overflow: "hidden", backgroundColor: COLORS.card, borderRadius: 22, paddingHorizontal: 17, paddingVertical: 15, gap: 4, shadowColor: "#5E5748", shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
   stageCardCurrent: { backgroundColor: "#FFFDF9", borderWidth: 1.5, borderColor: "#90A582", shadowOpacity: 0.1, elevation: 3 },
+  stageCardPlanned: { backgroundColor: "#F6F8F1", borderWidth: 1, borderColor: "#D7E0CF" },
   stageCardLocked: { backgroundColor: COLORS.future, opacity: 0.72 },
   stageTopRow: { height: 31, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   stageIllustration: { position: "absolute", right: -2, top: -6, width: 94, height: 72 },
@@ -658,6 +661,8 @@ const styles = StyleSheet.create({
   currentBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 5, borderRadius: 12, backgroundColor: "#EEF0E4", paddingHorizontal: 8, paddingVertical: 5 },
   currentBadgeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.forest },
   currentBadgeText: { color: COLORS.forest, fontSize: 11, fontWeight: "800" },
+  plannedBadge: { flexDirection: "row-reverse", alignItems: "center", gap: 5, borderRadius: 12, backgroundColor: "#E8EBDD", paddingHorizontal: 8, paddingVertical: 5 },
+  plannedBadgeText: { color: COLORS.forest, fontSize: 11, fontWeight: "800" },
   stageMuted: { color: "#85897E" },
 
   tasksList: { marginHorizontal: 18, gap: 10 },

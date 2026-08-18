@@ -51,7 +51,7 @@ type CalendarState = "locked" | "current" | "completed";
 
 export default function CalendarScreen() {
   const { isAuthenticated } = useAuth();
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const navigation = useNavigation();
   const calendar = trpc.calendar.get.useQuery(undefined, { enabled: isAuthenticated });
   const reminderEnabled = useReminderStatus(isAuthenticated);
@@ -88,13 +88,11 @@ export default function CalendarScreen() {
 
   const currentTask = findCurrentTask(days);
   const completedDays = days.filter((day) => getDayState(day) === "completed").length;
-  const monthLabel = formatPlanMonth(calendar.data.plan.createdAt, language);
-
   return (
     <ScreenContainer containerClassName="bg-[#FDF9F4]">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <CalendarHero reminderEnabled={reminderEnabled} />
-        <CalendarSurface days={days} monthLabel={monthLabel} completedDays={completedDays} />
+        <CalendarSurface days={days} completedDays={completedDays} />
         {currentTask && <CurrentTaskCard task={currentTask} completedDays={completedDays} totalDays={days.length} />}
       </ScrollView>
     </ScreenContainer>
@@ -140,11 +138,9 @@ function CalendarHero({ reminderEnabled }: { reminderEnabled: boolean }) {
 
 function CalendarSurface({
   days,
-  monthLabel,
   completedDays,
 }: {
   days: CalendarDay[];
-  monthLabel: string;
   completedDays: number;
 }) {
   const { language, t } = useLanguage();
@@ -155,10 +151,9 @@ function CalendarSurface({
 
   return (
     <View style={styles.calendarSurface}>
-      <View style={[styles.calendarControls, directional.row]}>
-        <View style={[styles.controlGroup, directional.row]}><View style={styles.controlIconMuted}><MaterialIcons name="format-list-bulleted" size={24} color={COLORS.forestMuted} /></View><View style={styles.controlIconActive}><MaterialIcons name="calendar-month" size={24} color={COLORS.forest} /></View></View>
-        <View style={[styles.monthLabel, directional.row]}><MaterialIcons name={directional.isRTL ? "chevron-right" : "chevron-left"} size={27} color={COLORS.forest} /><Text style={styles.monthText}>{monthLabel}</Text><MaterialIcons name={directional.isRTL ? "chevron-left" : "chevron-right"} size={27} color={COLORS.forest} /></View>
-        <View style={[styles.filterControl, directional.row]}><MaterialIcons name="filter-list" size={22} color={COLORS.forestMuted} /><Text style={styles.filterText}>{t("calendar.learningPath")}</Text></View>
+      <View style={[styles.calendarHeading, directional.row]}>
+        <View style={styles.calendarHeadingIcon}><MaterialIcons name="calendar-month" size={21} color={COLORS.forest} /></View>
+        <Text style={styles.calendarHeadingText}>{t("calendar.learningPath")}</Text>
       </View>
       <View style={styles.calendarDivider} />
       <View style={[styles.weekdayRow, directional.row]}>{weekdayNames.map((name) => <Text key={name} style={styles.weekday}>{name}</Text>)}</View>
@@ -303,11 +298,6 @@ function chunk<T>(items: T[], size: number) {
   return rows;
 }
 
-function formatPlanMonth(date: Date | string, language: "ar" | "en") {
-  const parsed = date instanceof Date ? date : new Date(date);
-  return new Intl.DateTimeFormat(language, { month: "long", year: "numeric" }).format(parsed);
-}
-
 function formatDuration(minutes: number, language: "ar" | "en") {
   if (minutes <= 0) return "—";
   const hours = Math.floor(minutes / 60);
@@ -330,14 +320,9 @@ const styles = StyleSheet.create({
   heroSubtitle: { color: COLORS.forestMuted, fontSize: 16, fontWeight: "500", textAlign: "center" },
 
   calendarSurface: { marginHorizontal: 14, marginTop: -13, padding: 18, borderRadius: 29, backgroundColor: COLORS.card, shadowColor: "#5E5748", shadowOpacity: 0.09, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 3 },
-  calendarControls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 7 },
-  controlGroup: { flexDirection: "row", width: 116, minHeight: 50, borderRadius: 15, backgroundColor: "#F6F3EC", overflow: "hidden" },
-  controlIconMuted: { flex: 1, justifyContent: "center", alignItems: "center" },
-  controlIconActive: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#E5E9DB", borderRadius: 14 },
-  monthLabel: { flex: 1, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 1 },
-  monthText: { color: COLORS.forest, fontSize: 17, fontWeight: "800", textAlign: "center" },
-  filterControl: { width: 104, minHeight: 50, borderRadius: 15, borderWidth: 1, borderColor: "#EAE5DC", flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 4 },
-  filterText: { color: COLORS.forestMuted, fontSize: 12, fontWeight: "700" },
+  calendarHeading: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 36 },
+  calendarHeadingIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#E8EBDD", alignItems: "center", justifyContent: "center" },
+  calendarHeadingText: { color: COLORS.forest, fontSize: 17, fontWeight: "800", textAlign: "center" },
   calendarDivider: { height: 1, backgroundColor: COLORS.border, marginTop: 16, marginBottom: 13 },
   weekdayRow: { flexDirection: "row-reverse", justifyContent: "space-between", marginBottom: 8 },
   weekday: { flex: 1, color: COLORS.warmGray, fontSize: 9.5, fontWeight: "700", textAlign: "center" },
